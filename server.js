@@ -15,7 +15,15 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-const sslRequired = /sslmode=require/.test(DATABASE_URL);
+let sslMode = null;
+try {
+  const dbUrl = new URL(DATABASE_URL);
+  sslMode = dbUrl.searchParams.get('sslmode');
+} catch (error) {
+  console.warn('Failed to parse DATABASE_URL for sslmode.');
+}
+
+const sslRequired = process.env.DATABASE_SSL === 'true' || (sslMode && sslMode !== 'disable');
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: sslRequired ? { rejectUnauthorized: false } : undefined
@@ -169,12 +177,12 @@ app.delete('/api/services/:id', requirePin, async (req, res, next) => {
   try {
     const id = req.params.id;
     const active = await pool.query(
-      "SELECT COUNT(*) FROM queue WHERE service_id = $1 AND status NOT IN ('served', 'canceled')",
+      'SELECT COUNT(*) FROM queue WHERE service_id = $1',
       [id]
     );
 
     if (Number(active.rows[0]?.count || 0) > 0) {
-      return res.status(409).json({ error: 'Service is still used by active queue entries.' });
+      return res.status(409).json({ error: 'Service is still used by queue history.' });
     }
 
     const result = await pool.query('DELETE FROM services WHERE id = $1', [id]);
