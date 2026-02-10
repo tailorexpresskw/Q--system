@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Q System</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-view="dashboard">
+  <div class="ambient-sheen"></div>
+  <header class="site-header">
+    <div class="brand">
+      <div class="brand-mark">Q</div>
+      <div>
+        <h1>Q System</h1>
+        <p class="subtitle">Live queue control with realtime sync.</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn ghost" id="copyCheckinHeader">Copy check-in link</button>
+      <a class="btn primary" id="openCheckinHeader" href="?checkin=1">Open check-in</a>
+    </div>
+  </header>
+
+  <main>
+    <section id="dashboardView" class="view dashboard">
+      <section class="metrics">
+        <div class="metric">
+          <span class="label">Active in queue</span>
+          <span class="value" id="metricActive">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">Estimated total wait</span>
+          <span class="value" id="metricTotalWait">0 min</span>
+        </div>
+        <div class="metric">
+          <span class="label">Average service time</span>
+          <span class="value" id="metricAvgService">0 min</span>
+        </div>
+        <div class="metric">
+          <span class="label">Last check-in</span>
+          <span class="value" id="metricLastCheckin">—</span>
+        </div>
+      </section>
+
+      <section class="dashboard-grid">
+        <section class="panel queue-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Live Queue</h2>
+              <p class="muted">ETAs are driven by service averages and queue order.</p>
+            </div>
+            <div class="panel-actions">
+              <button class="btn ghost" id="refreshQueue">Refresh</button>
+              <button class="btn primary" id="exportCsv">Export CSV</button>
+            </div>
+          </div>
+
+          <div class="queue-highlight">
+            <div>
+              <span class="label">Now serving</span>
+              <span class="value" id="nowServing">—</span>
+            </div>
+            <div>
+              <span class="label">Next up</span>
+              <span class="value" id="nextUp">—</span>
+            </div>
+            <div>
+              <span class="label">Projected finish</span>
+              <span class="value" id="projectedFinish">—</span>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table id="queueTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Service</th>
+                  <th>Status</th>
+                  <th>Wait</th>
+                  <th>ETA</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel share-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Public Check-In</h2>
+              <p class="muted">Share this link or QR code to accept arrivals.</p>
+            </div>
+          </div>
+          <div class="share-link">
+            <input id="checkinLink" type="text" readonly />
+            <button class="btn primary" id="copyCheckin">Copy link</button>
+          </div>
+          <div class="qr-wrap">
+            <img id="qrImage" alt="QR code for check-in link" />
+            <p class="muted small">QR code generated from the current check-in URL.</p>
+          </div>
+          <div class="note">
+            Data is synced via the backend database.
+          </div>
+          <div class="pin-box">
+            <h3>Staff PIN</h3>
+            <p class="muted small">Required for staff actions like notify, serve, cancel, and service edits.</p>
+            <div class="pin-row">
+              <input id="staffPinInput" type="password" placeholder="Enter PIN" />
+              <button class="btn ghost" id="saveStaffPin">Save</button>
+            </div>
+            <div class="pin-status muted small" id="staffPinStatus"></div>
+          </div>
+        </section>
+
+        <section class="panel services-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Services</h2>
+              <p class="muted">Average service time (minutes) drives ETA math.</p>
+            </div>
+            <div class="panel-actions">
+              <button class="btn ghost" id="addService">Add service</button>
+            </div>
+          </div>
+          <div id="servicesList" class="services-list"></div>
+        </section>
+      </section>
+    </section>
+
+    <section id="checkinView" class="view checkin">
+      <div class="checkin-layout">
+        <div class="checkin-card">
+          <div class="checkin-header">
+            <span class="chip">Public check-in</span>
+            <h2>Join the queue</h2>
+            <p class="muted">Enter your details to reserve your spot.</p>
+          </div>
+          <form id="checkinForm">
+            <label>
+              Full name
+              <input id="checkinName" name="name" type="text" placeholder="Alex Johnson" required />
+            </label>
+            <label>
+              Phone
+              <input id="checkinPhone" name="phone" type="tel" placeholder="(555) 555-0199" required />
+            </label>
+            <label>
+              Service
+              <select id="checkinService" name="service" required></select>
+            </label>
+            <button class="btn primary" type="submit">Check in</button>
+          </form>
+          <div id="checkinStatus" class="checkin-status"></div>
+        </div>
+        <div class="checkin-info">
+          <div class="panel compact">
+            <h3>How it works</h3>
+            <p class="muted">Your ETA is calculated from the queue ahead of you and the service time averages.</p>
+            <ul class="inline-list">
+              <li>Queue position updates in real time.</li>
+              <li>Notifications are handled by staff on the dashboard.</li>
+              <li>Everything stays synced across devices.</li>
+            </ul>
+          </div>
+          <a class="btn ghost" href="./">Staff dashboard</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>Q System · Realtime queue</span>
+    <span>Use ?checkin=1 for the public check-in view.</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
