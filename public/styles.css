@@ -407,6 +407,25 @@ label {
   gap: 8px;
 }
 
+.branch-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(51, 32, 42, 0.05);
+  display: grid;
+  gap: 10px;
+}
+
+.branch-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.branch-meta {
+  min-height: 18px;
+}
+
 .pin-row {
   display: flex;
   gap: 10px;
@@ -543,6 +562,11 @@ label {
   }
 
   .pin-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .branch-row {
     flex-direction: column;
     align-items: stretch;
   }

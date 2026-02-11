@@ -9,6 +9,7 @@ const { WebSocketServer } = require('ws');
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const STAFF_PIN = process.env.STAFF_PIN;
+const ADMIN_PIN = process.env.ADMIN_PIN || STAFF_PIN;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is not set.');
@@ -52,6 +53,19 @@ function requirePin(req, res, next) {
   return next();
 }
 
+function requireAdmin(req, res, next) {
+  if (!ADMIN_PIN) {
+    return res.status(500).json({ error: 'ADMIN_PIN is not configured.' });
+  }
+
+  const provided = req.header('x-qsys-admin-pin') || req.header('x-qsys-pin');
+  if (!provided || provided !== ADMIN_PIN) {
+    return res.status(401).json({ error: 'Invalid admin PIN.' });
+  }
+
+  return next();
+}
+
 function mapService(row) {
   return {
     id: row.id,
@@ -66,6 +80,7 @@ function mapQueue(row) {
     name: row.name,
     phone: row.phone,
     serviceId: row.service_id,
+    branchId: row.branch_id,
     ticketNumber: row.ticket_number,
     status: row.status,
     createdAt: row.created_at,
@@ -75,7 +90,55 @@ function mapQueue(row) {
   };
 }
 
+function generateBranchCode() {
+  return crypto.randomBytes(3).toString('hex');
+}
+
+async function ensureDefaultBranch() {
+  const existing = await pool.query('SELECT id FROM branches ORDER BY created_at LIMIT 1');
+  if (existing.rowCount) {
+    return existing.rows[0].id;
+  }
+
+  const id = crypto.randomUUID();
+  const name = 'Main';
+  let code = 'main';
+  const codeCheck = await pool.query('SELECT 1 FROM branches WHERE code = $1', [code]);
+  if (codeCheck.rowCount) {
+    code = generateBranchCode();
+  }
+
+  await pool.query(
+    'INSERT INTO branches (id, name, code, next_ticket) VALUES ($1, $2, $3, 0)',
+    [id, name, code]
+  );
+
+  return id;
+}
+
+async function getBranchByCode(code) {
+  if (!code) return null;
+  const result = await pool.query('SELECT id, name, code FROM branches WHERE code = $1', [code]);
+  return result.rowCount ? result.rows[0] : null;
+}
+
+async function getBranchById(id) {
+  if (!id) return null;
+  const result = await pool.query('SELECT id, name, code FROM branches WHERE id = $1', [id]);
+  return result.rowCount ? result.rows[0] : null;
+}
+
 async function initDatabase() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS branches (
+      id uuid PRIMARY KEY,
+      name text NOT NULL,
+      code text NOT NULL UNIQUE,
+      next_ticket integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS services (
       id uuid PRIMARY KEY,
@@ -91,6 +154,7 @@ async function initDatabase() {
       name text NOT NULL,
       phone text NOT NULL,
       service_id uuid NOT NULL REFERENCES services(id),
+      branch_id uuid REFERENCES branches(id),
       ticket_number integer,
       status text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
@@ -101,7 +165,9 @@ async function initDatabase() {
   `);
 
   await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS ticket_number integer;`);
+  await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS branch_id uuid REFERENCES branches(id);`);
   await pool.query('CREATE SEQUENCE IF NOT EXISTS queue_ticket_seq;');
+  await pool.query('CREATE INDEX IF NOT EXISTS queue_branch_created_idx ON queue (branch_id, created_at);');
 
   await pool.query('CREATE INDEX IF NOT EXISTS queue_created_at_idx ON queue (created_at);');
 
@@ -115,6 +181,9 @@ async function initDatabase() {
       );
     }
   }
+
+  const defaultBranchId = await ensureDefaultBranch();
+  await pool.query('UPDATE queue SET branch_id = $1 WHERE branch_id IS NULL', [defaultBranchId]);
 }
 
 async function getDefaultServiceId() {
@@ -138,6 +207,49 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/auth', requirePin, (req, res) => {
   res.json({ ok: true });
+});
+
+app.get('/api/branches', async (req, res, next) => {
+  try {
+    const result = await pool.query('SELECT id, name, code FROM branches ORDER BY created_at');
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/branches', requireAdmin, async (req, res, next) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    if (!name) {
+      return res.status(400).json({ error: 'Invalid branch payload.' });
+    }
+
+    const id = crypto.randomUUID();
+    let code = '';
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = generateBranchCode();
+      const exists = await pool.query('SELECT 1 FROM branches WHERE code = $1', [candidate]);
+      if (!exists.rowCount) {
+        code = candidate;
+        break;
+      }
+    }
+
+    if (!code) {
+      return res.status(500).json({ error: 'Failed to allocate branch code.' });
+    }
+
+    await pool.query(
+      'INSERT INTO branches (id, name, code, next_ticket) VALUES ($1, $2, $3, 0)',
+      [id, name, code]
+    );
+
+    broadcast({ type: 'data.updated' });
+    res.status(201).json({ id, name, code });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/services', async (req, res, next) => {
@@ -223,8 +335,26 @@ app.delete('/api/services/:id', requirePin, async (req, res, next) => {
 
 app.get('/api/queue', async (req, res, next) => {
   try {
+    const branchIdParam = String(req.query.branchId || '').trim();
+    const branchCodeParam = String(req.query.branch || '').trim();
+    let branch = null;
+
+    if (branchIdParam) {
+      branch = await getBranchById(branchIdParam);
+    } else if (branchCodeParam) {
+      branch = await getBranchByCode(branchCodeParam);
+    } else {
+      const defaultBranchId = await ensureDefaultBranch();
+      branch = await getBranchById(defaultBranchId);
+    }
+
+    if (!branch) {
+      return res.status(400).json({ error: 'Branch not found.' });
+    }
+
     const result = await pool.query(
-      'SELECT id, name, phone, service_id, ticket_number, status, created_at, notified_at, served_at, canceled_at FROM queue ORDER BY created_at'
+      'SELECT id, name, phone, service_id, branch_id, ticket_number, status, created_at, notified_at, served_at, canceled_at FROM queue WHERE branch_id = $1 ORDER BY created_at',
+      [branch.id]
     );
     res.json(result.rows.map(mapQueue));
   } catch (error) {
@@ -237,6 +367,8 @@ app.post('/api/checkin', async (req, res, next) => {
     const name = String(req.body.name || '').trim();
     const phone = String(req.body.phone || '').trim();
     let serviceId = String(req.body.serviceId || '').trim();
+    const branchCode = String(req.body.branchCode || '').trim();
+    const branchIdBody = String(req.body.branchId || '').trim();
 
     if (!name || !phone) {
       return res.status(400).json({ error: 'Invalid check-in payload.' });
@@ -251,16 +383,46 @@ app.post('/api/checkin', async (req, res, next) => {
       serviceId = await getDefaultServiceId();
     }
 
-    const id = crypto.randomUUID();
-    const result = await pool.query(
-      `INSERT INTO queue (id, name, phone, service_id, ticket_number, status)
-       VALUES ($1, $2, $3, $4, nextval('queue_ticket_seq'), 'waiting')
-       RETURNING id, name, phone, service_id, ticket_number, status, created_at, notified_at, served_at, canceled_at`,
-      [id, name, phone, serviceId]
-    );
+    let branch = null;
+    if (branchIdBody) {
+      branch = await getBranchById(branchIdBody);
+    } else if (branchCode) {
+      branch = await getBranchByCode(branchCode);
+    } else {
+      const defaultBranchId = await ensureDefaultBranch();
+      branch = await getBranchById(defaultBranchId);
+    }
 
-    broadcast({ type: 'data.updated' });
-    res.status(201).json(mapQueue(result.rows[0]));
+    if (!branch) {
+      return res.status(400).json({ error: 'Branch not found.' });
+    }
+
+    const id = crypto.randomUUID();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const counterResult = await client.query(
+        'UPDATE branches SET next_ticket = next_ticket + 1 WHERE id = $1 RETURNING next_ticket',
+        [branch.id]
+      );
+      const ticketNumber = Number(counterResult.rows[0]?.next_ticket || 0);
+
+      const result = await client.query(
+        `INSERT INTO queue (id, name, phone, service_id, branch_id, ticket_number, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'waiting')
+         RETURNING id, name, phone, service_id, branch_id, ticket_number, status, created_at, notified_at, served_at, canceled_at`,
+        [id, name, phone, serviceId, branch.id, ticketNumber]
+      );
+
+      await client.query('COMMIT');
+      broadcast({ type: 'data.updated' });
+      res.status(201).json(mapQueue(result.rows[0]));
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     next(error);
   }

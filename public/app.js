@@ -4,7 +4,9 @@ const API_BASE = '/api';
 const LOCAL_KEYS = {
   staffPin: 'qsys.staffPin',
   lang: 'qsys.lang',
-  staffUnlocked: 'qsys.staffUnlocked'
+  staffUnlocked: 'qsys.staffUnlocked',
+  adminPin: 'qsys.adminPin',
+  branchId: 'qsys.branchId'
 };
 
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -53,6 +55,15 @@ const translations = {
     'share.qrAlt': 'QR code for check-in link',
     'share.qrNote': 'QR code generated from the current check-in URL.',
     'share.dataNote': 'Data is synced via the backend database.',
+    'branches.title': 'Branches',
+    'branches.subtitle': 'Select a branch to view its queue or create a new one.',
+    'branches.create': 'Create',
+    'branches.code': 'Code: {code}',
+    'branches.promptName': 'Branch name',
+    'branches.promptAdminPin': 'Enter admin password',
+    'branches.created': 'Created branch {name} ({code}).',
+    'branches.error': 'Unable to create branch.',
+    'branches.invalidPin': 'Invalid admin password.',
     'pin.title': 'Staff PIN',
     'pin.subtitle': 'Required for staff actions like notify, serve, cancel, and service edits.',
     'pin.placeholder': 'Enter PIN',
@@ -159,6 +170,15 @@ const translations = {
     'share.qrAlt': 'رمز QR لرابط التسجيل',
     'share.qrNote': 'تم إنشاء رمز QR من رابط التسجيل الحالي.',
     'share.dataNote': 'تتم المزامنة عبر قاعدة بيانات الخادم.',
+    'branches.title': 'الفروع',
+    'branches.subtitle': 'اختر فرعًا لعرض طابوره أو أنشئ فرعًا جديدًا.',
+    'branches.create': 'إنشاء',
+    'branches.code': 'الرمز: {code}',
+    'branches.promptName': 'اسم الفرع',
+    'branches.promptAdminPin': 'أدخل كلمة مرور المدير',
+    'branches.created': 'تم إنشاء الفرع {name} ({code}).',
+    'branches.error': 'تعذر إنشاء الفرع.',
+    'branches.invalidPin': 'كلمة مرور المدير غير صحيحة.',
     'pin.title': 'رمز الموظفين',
     'pin.subtitle': 'مطلوب لإجراءات الموظفين مثل الإشعار، الخدمة، الإلغاء، وتعديل الخدمات.',
     'pin.placeholder': 'أدخل الرمز',
@@ -243,6 +263,9 @@ const dom = {
   staffLockInput: document.getElementById('staffLockInput'),
   staffLockButton: document.getElementById('staffLockButton'),
   staffLockStatus: document.getElementById('staffLockStatus'),
+  branchSelect: document.getElementById('branchSelect'),
+  createBranch: document.getElementById('createBranch'),
+  branchMeta: document.getElementById('branchMeta'),
   checkinForm: document.getElementById('checkinForm'),
   checkinName: document.getElementById('checkinName'),
   checkinPhone: document.getElementById('checkinPhone'),
@@ -263,6 +286,8 @@ let socket = null;
 let refreshTimer = null;
 let currentLang = 'en';
 let currentLocale = LANG_META.en.locale;
+let branches = [];
+let currentBranch = null;
 
 const isCheckinView = new URLSearchParams(window.location.search).get('checkin') === '1';
 document.body.dataset.view = isCheckinView ? 'checkin' : 'dashboard';
@@ -273,6 +298,7 @@ async function init() {
   bindEvents();
   applyLanguage(getInitialLang());
   setupStaffLock();
+  await loadBranches();
   loadStaffPin();
   setShareableLink();
   await refreshData();
@@ -307,12 +333,23 @@ function applyLanguage(lang) {
     dom.languageSelect.value = normalized;
     dom.languageSelect.setAttribute('aria-label', t('language.label'));
   }
+
+  if (dom.branchSelect) {
+    dom.branchSelect.setAttribute('aria-label', t('branches.title'));
+  }
+
   document.title = t('app.title');
   translateStatic();
   renderAll();
   updateCheckinStatus();
   updatePinStatus();
   updateStaffLockStatus();
+
+  if (currentBranch) {
+    updateBranchMeta('branches.code', { code: currentBranch.code });
+  } else {
+    updateBranchMeta(dom.branchMeta?.dataset.statusKey || '');
+  }
 }
 
 function translateStatic() {
@@ -439,6 +476,120 @@ async function handleStaffUnlock() {
   }
 }
 
+function getBranchCodeFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return String(params.get('branch') || '').trim().toLowerCase();
+}
+
+function updateBranchMeta(messageKey, values = {}) {
+  if (!dom.branchMeta) return;
+  if (!messageKey) {
+    dom.branchMeta.textContent = '';
+    dom.branchMeta.dataset.statusKey = '';
+    return;
+  }
+  dom.branchMeta.dataset.statusKey = messageKey;
+  dom.branchMeta.textContent = t(messageKey, values);
+}
+
+function setCurrentBranchById(id) {
+  if (!id) return;
+  const nextBranch = branches.find((branch) => branch.id === id);
+  if (!nextBranch) return;
+  currentBranch = nextBranch;
+  localStorage.setItem(LOCAL_KEYS.branchId, currentBranch.id);
+  if (dom.branchSelect) {
+    dom.branchSelect.value = currentBranch.id;
+  }
+  updateBranchMeta('branches.code', { code: currentBranch.code });
+  setShareableLink();
+  refreshData();
+}
+
+async function loadBranches() {
+  try {
+    const response = await fetch(`${API_BASE}/branches`);
+    if (!response.ok) {
+      throw new Error('Failed to load branches.');
+    }
+    branches = await response.json();
+  } catch (error) {
+    branches = [];
+  }
+
+  const urlCode = getBranchCodeFromUrl();
+  const storedId = localStorage.getItem(LOCAL_KEYS.branchId);
+  if (urlCode) {
+    currentBranch = branches.find((branch) => branch.code === urlCode) || branches[0] || null;
+  } else if (storedId) {
+    currentBranch = branches.find((branch) => branch.id === storedId) || branches[0] || null;
+  } else {
+    currentBranch = branches[0] || null;
+  }
+
+  if (currentBranch) {
+    localStorage.setItem(LOCAL_KEYS.branchId, currentBranch.id);
+  }
+
+  if (dom.branchSelect) {
+    dom.branchSelect.innerHTML = '';
+    branches.forEach((branch) => {
+      const option = new Option(`${branch.name} (${branch.code})`, branch.id);
+      dom.branchSelect.appendChild(option);
+    });
+    dom.branchSelect.value = currentBranch ? currentBranch.id : '';
+  }
+
+  if (currentBranch) {
+    updateBranchMeta('branches.code', { code: currentBranch.code });
+  }
+}
+
+function getAdminPin() {
+  return localStorage.getItem(LOCAL_KEYS.adminPin) || '';
+}
+
+function setAdminPin(pin) {
+  if (!pin) {
+    localStorage.removeItem(LOCAL_KEYS.adminPin);
+    return;
+  }
+  localStorage.setItem(LOCAL_KEYS.adminPin, pin);
+}
+
+async function handleCreateBranch() {
+  const name = window.prompt(t('branches.promptName'));
+  if (!name) return;
+
+  let adminPin = getAdminPin();
+  if (!adminPin) {
+    adminPin = window.prompt(t('branches.promptAdminPin')) || '';
+  }
+
+  if (!adminPin) {
+    updateBranchMeta('branches.invalidPin');
+    return;
+  }
+
+  try {
+    const created = await createBranch(name.trim(), adminPin.trim());
+    setAdminPin(adminPin.trim());
+    await loadBranches();
+    if (created && created.id) {
+      setCurrentBranchById(created.id);
+      updateBranchMeta('branches.created', { name: created.name, code: created.code });
+    }
+  } catch (error) {
+    setAdminPin('');
+    const message = String(error?.message || '').toLowerCase();
+    if (message.includes('invalid')) {
+      updateBranchMeta('branches.invalidPin');
+    } else {
+      updateBranchMeta('branches.error');
+    }
+  }
+}
+
 function formatTicketNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return '';
@@ -471,6 +622,16 @@ function bindEvents() {
         handleStaffUnlock();
       }
     });
+  }
+
+  if (dom.branchSelect) {
+    dom.branchSelect.addEventListener('change', (event) => {
+      setCurrentBranchById(event.target.value);
+    });
+  }
+
+  if (dom.createBranch) {
+    dom.createBranch.addEventListener('click', handleCreateBranch);
   }
 
   if (dom.checkinForm) {
@@ -553,7 +714,8 @@ async function fetchServices() {
 }
 
 async function fetchQueue() {
-  const response = await fetch(`${API_BASE}/queue`);
+  const branchQuery = currentBranch ? `?branchId=${encodeURIComponent(currentBranch.id)}` : '';
+  const response = await fetch(`${API_BASE}/queue${branchQuery}`);
   if (!response.ok) {
     throw new Error('Failed to load queue.');
   }
@@ -843,7 +1005,13 @@ function calculateEtaForEntry(entryId, orderedQueue) {
 
 function setShareableLink() {
   const baseUrl = `${window.location.origin}${window.location.pathname}`;
-  const checkinUrl = `${baseUrl}?checkin=1`;
+  const branchCode = currentBranch ? currentBranch.code : '';
+  const params = new URLSearchParams();
+  params.set('checkin', '1');
+  if (branchCode) {
+    params.set('branch', branchCode);
+  }
+  const checkinUrl = `${baseUrl}?${params.toString()}`;
 
   if (dom.checkinLink) {
     dom.checkinLink.value = checkinUrl;
@@ -957,10 +1125,30 @@ function formatEtaTime(minutes) {
 }
 
 async function createCheckin(payload) {
+  const branchCode = getBranchCodeFromUrl() || (currentBranch ? currentBranch.code : '');
+  const branchId = currentBranch ? currentBranch.id : '';
   return apiFetch('/checkin', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ ...payload, branchCode, branchId })
   });
+}
+
+async function createBranch(name, adminPin) {
+  const response = await fetch(`${API_BASE}/branches`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-qsys-admin-pin': adminPin
+    },
+    body: JSON.stringify({ name })
+  });
+
+  if (!response.ok) {
+    const payload = await safeJson(response);
+    throw new Error(payload.error || 'Request failed.');
+  }
+
+  return response.json();
 }
 
 async function createService(payload) {

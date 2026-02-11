@@ -126,6 +126,15 @@
           <div class="note">
             <span data-i18n="share.dataNote">Data is synced via the backend database.</span>
           </div>
+          <div class="branch-box">
+            <h3 data-i18n="branches.title">Branches</h3>
+            <p class="muted small" data-i18n="branches.subtitle">Select a branch to view its queue or create a new one.</p>
+            <div class="branch-row">
+              <select id="branchSelect" aria-label="Branch"></select>
+              <button class="btn ghost" id="createBranch" data-i18n="branches.create">Create</button>
+            </div>
+            <div class="branch-meta muted small" id="branchMeta"></div>
+          </div>
           <div class="pin-box">
             <h3 data-i18n="pin.title">Staff PIN</h3>
             <p class="muted small" data-i18n="pin.subtitle">Required for staff actions like notify, serve, cancel, and service edits.</p>
