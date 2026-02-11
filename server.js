@@ -164,6 +164,8 @@ async function initDatabase() {
     );
   `);
 
+  await pool.query('ALTER TABLE queue ALTER COLUMN name DROP NOT NULL;');
+  await pool.query('ALTER TABLE queue ALTER COLUMN phone DROP NOT NULL;');
   await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS ticket_number integer;`);
   await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS branch_id uuid REFERENCES branches(id);`);
   await pool.query('CREATE SEQUENCE IF NOT EXISTS queue_ticket_seq;');
@@ -370,10 +372,6 @@ app.post('/api/checkin', async (req, res, next) => {
     const branchCode = String(req.body.branchCode || '').trim();
     const branchIdBody = String(req.body.branchId || '').trim();
 
-    if (!name || !phone) {
-      return res.status(400).json({ error: 'Invalid check-in payload.' });
-    }
-
     if (serviceId) {
       const serviceCheck = await pool.query('SELECT id FROM services WHERE id = $1', [serviceId]);
       if (!serviceCheck.rowCount) {
@@ -411,7 +409,7 @@ app.post('/api/checkin', async (req, res, next) => {
         `INSERT INTO queue (id, name, phone, service_id, branch_id, ticket_number, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'waiting')
          RETURNING id, name, phone, service_id, branch_id, ticket_number, status, created_at, notified_at, served_at, canceled_at`,
-        [id, name, phone, serviceId, branch.id, ticketNumber]
+        [id, name || null, phone || null, serviceId, branch.id, ticketNumber]
       );
 
       await client.query('COMMIT');

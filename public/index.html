@@ -157,16 +157,24 @@
             <h2 data-i18n="checkin.title">Join the queue</h2>
             <p class="muted" data-i18n="checkin.subtitle">Enter your details to reserve your spot.</p>
           </div>
+          <div class="ticket-display" id="ticketDisplay">
+            <span class="label" data-i18n="ticket.label">Your number</span>
+            <div class="ticket-number" id="ticketNumberDisplay">Q-0</div>
+            <p class="muted small" data-i18n="ticket.note">Keep this number. It will stay on your screen.</p>
+          </div>
           <form id="checkinForm">
             <label>
               <span data-i18n="checkin.nameLabel">Full name</span>
-              <input id="checkinName" name="name" type="text" placeholder="Alex Johnson" data-i18n-placeholder="checkin.namePlaceholder" required />
+              <input id="checkinName" name="name" type="text" placeholder="Alex Johnson" data-i18n-placeholder="checkin.namePlaceholder" />
             </label>
             <label>
               <span data-i18n="checkin.phoneLabel">Phone</span>
-              <input id="checkinPhone" name="phone" type="tel" placeholder="(555) 555-0199" data-i18n-placeholder="checkin.phonePlaceholder" required />
+              <input id="checkinPhone" name="phone" type="tel" placeholder="(555) 555-0199" data-i18n-placeholder="checkin.phonePlaceholder" />
             </label>
-            <button class="btn primary" type="submit" data-i18n="checkin.submit">Check in</button>
+            <div class="checkin-actions">
+              <button class="btn primary" type="submit" data-i18n="checkin.submit">Check in</button>
+              <button class="btn ghost" type="button" id="quickCheckin" data-i18n="checkin.quick">Take number</button>
+            </div>
           </form>
           <div id="checkinStatus" class="checkin-status"></div>
         </div>
@@ -174,6 +182,20 @@
           <a class="btn ghost" href="./" data-i18n="help.backToStaff">Staff dashboard</a>
         </div>
       </div>
+    </section>
+
+    <section id="displayView" class="view display">
+      <div class="display-board">
+        <div class="display-card current">
+          <span class="label" data-i18n="display.nowServing">Now serving</span>
+          <div class="display-number" id="displayNow">Q-0</div>
+        </div>
+        <div class="display-card next">
+          <span class="label" data-i18n="display.nextUp">Next</span>
+          <div class="display-number" id="displayNext">Q-0</div>
+        </div>
+      </div>
+      <div class="display-note muted" data-i18n="display.note">Please wait until your number appears.</div>
     </section>
   </main>
 

@@ -459,11 +459,89 @@ label {
   align-items: start;
 }
 
+.display-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+
+.display-card {
+  background: var(--panel);
+  border-radius: var(--radius);
+  padding: 32px;
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(96, 32, 46, 0.08);
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  min-height: 280px;
+}
+
+.display-card .label {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+}
+
+.display-number {
+  font-size: clamp(48px, 10vw, 120px);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.display-card.next .display-number {
+  color: #2b5aa8;
+  opacity: 0.55;
+  filter: blur(1.4px);
+}
+
+.display-note {
+  margin-top: 18px;
+  text-align: center;
+}
+
 .checkin-card {
   background: var(--panel);
   border-radius: var(--radius);
   padding: 28px;
   box-shadow: var(--shadow);
+}
+
+.ticket-display {
+  display: none;
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(96, 32, 46, 0.08);
+  text-align: center;
+  border: 1px dashed rgba(96, 32, 46, 0.25);
+}
+
+.ticket-display.active {
+  display: grid;
+  gap: 8px;
+}
+
+.ticket-display .label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.ticket-number {
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.checkin-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .checkin-header {
@@ -520,7 +598,30 @@ label {
   display: none;
 }
 
+[data-view="display"] .site-header,
+[data-view="display"] .site-footer {
+  display: none;
+}
+
+[data-view="display"] .view {
+  padding-top: 48px;
+}
+
+[data-view="display"] #dashboardView,
+[data-view="display"] #checkinView {
+  display: none;
+}
+
+[data-view="dashboard"] #displayView,
+[data-view="checkin"] #displayView {
+  display: none;
+}
+
 [data-view="checkin"] .staff-lock {
+  display: none !important;
+}
+
+[data-view="display"] .staff-lock {
   display: none !important;
 }
 
@@ -554,6 +655,10 @@ label {
   .queue-highlight {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .display-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 600px) {
@@ -579,6 +684,11 @@ label {
     width: 100%;
     justify-content: center;
   }
+
+  .checkin-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 html[dir="rtl"] .site-header,
@@ -590,7 +700,9 @@ html[dir="rtl"] .header-actions,
 html[dir="rtl"] .panel-actions,
 html[dir="rtl"] .row-actions,
 html[dir="rtl"] .share-link,
-html[dir="rtl"] .pin-row {
+html[dir="rtl"] .pin-row,
+html[dir="rtl"] .checkin-actions,
+html[dir="rtl"] .branch-row {
   flex-direction: row-reverse;
 }
 

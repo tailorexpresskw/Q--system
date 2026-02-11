@@ -6,7 +6,10 @@ const LOCAL_KEYS = {
   lang: 'qsys.lang',
   staffUnlocked: 'qsys.staffUnlocked',
   adminPin: 'qsys.adminPin',
-  branchId: 'qsys.branchId'
+  branchId: 'qsys.branchId',
+  ticketEntryId: 'qsys.ticketEntryId',
+  ticketNumber: 'qsys.ticketNumber',
+  ticketBranchId: 'qsys.ticketBranchId'
 };
 
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -81,11 +84,12 @@ const translations = {
     'service.remove': 'Remove',
     'checkin.chip': 'Public check-in',
     'checkin.title': 'Join the queue',
-    'checkin.subtitle': 'Enter your details to reserve your spot.',
-    'checkin.nameLabel': 'Full name',
+    'checkin.subtitle': 'Name and phone are optional.',
+    'checkin.nameLabel': 'Full name (optional)',
     'checkin.namePlaceholder': 'Alex Johnson',
-    'checkin.phoneLabel': 'Phone',
+    'checkin.phoneLabel': 'Phone (optional)',
     'checkin.phonePlaceholder': '(555) 555-0199',
+    'checkin.quick': 'Take number',
     'checkin.serviceLabel': 'Service',
     'checkin.submit': 'Check in',
     'checkin.status.generic': 'Checked in successfully. Your spot will update shortly.',
@@ -100,6 +104,11 @@ const translations = {
     'help.item2': 'Notifications are handled by staff on the dashboard.',
     'help.item3': 'Everything stays synced across devices.',
     'help.backToStaff': 'Staff dashboard',
+    'ticket.label': 'Your number',
+    'ticket.note': 'Keep this number. It will stay on your screen.',
+    'display.nowServing': 'Now serving',
+    'display.nextUp': 'Next',
+    'display.note': 'Please wait until your number appears.',
     'footer.left': 'Q System · Realtime queue',
     'footer.right': 'Use ?checkin=1 for the public check-in view.',
     'lock.title': 'Staff access',
@@ -196,11 +205,12 @@ const translations = {
     'service.remove': 'إزالة',
     'checkin.chip': 'تسجيل عام',
     'checkin.title': 'انضم إلى الطابور',
-    'checkin.subtitle': 'أدخل بياناتك لحجز دورك.',
-    'checkin.nameLabel': 'الاسم الكامل',
+    'checkin.subtitle': 'الاسم ورقم الهاتف اختياريان.',
+    'checkin.nameLabel': 'الاسم الكامل (اختياري)',
     'checkin.namePlaceholder': 'أحمد محمد',
-    'checkin.phoneLabel': 'الهاتف',
+    'checkin.phoneLabel': 'الهاتف (اختياري)',
     'checkin.phonePlaceholder': '050 000 0000',
+    'checkin.quick': 'خذ رقمًا',
     'checkin.serviceLabel': 'الخدمة',
     'checkin.submit': 'تسجيل',
     'checkin.status.generic': 'تم التسجيل بنجاح. سيتم تحديث دورك قريبًا.',
@@ -215,6 +225,11 @@ const translations = {
     'help.item2': 'يتولى الموظفون الإشعارات عبر لوحة التحكم.',
     'help.item3': 'يبقى كل شيء متزامنًا عبر الأجهزة.',
     'help.backToStaff': 'لوحة الموظفين',
+    'ticket.label': 'رقمك',
+    'ticket.note': 'احتفظ بهذا الرقم. سيبقى ظاهرًا على الشاشة.',
+    'display.nowServing': 'يُخدم الآن',
+    'display.nextUp': 'التالي',
+    'display.note': 'يرجى الانتظار حتى يظهر رقمك.',
     'footer.left': 'نظام Q · طابور فوري',
     'footer.right': 'استخدم ?checkin=1 لعرض صفحة التسجيل العامة.',
     'lock.title': 'دخول الموظفين',
@@ -266,6 +281,11 @@ const dom = {
   branchSelect: document.getElementById('branchSelect'),
   createBranch: document.getElementById('createBranch'),
   branchMeta: document.getElementById('branchMeta'),
+  quickCheckin: document.getElementById('quickCheckin'),
+  ticketDisplay: document.getElementById('ticketDisplay'),
+  ticketNumberDisplay: document.getElementById('ticketNumberDisplay'),
+  displayNow: document.getElementById('displayNow'),
+  displayNext: document.getElementById('displayNext'),
   checkinForm: document.getElementById('checkinForm'),
   checkinName: document.getElementById('checkinName'),
   checkinPhone: document.getElementById('checkinPhone'),
@@ -289,8 +309,10 @@ let currentLocale = LANG_META.en.locale;
 let branches = [];
 let currentBranch = null;
 
-const isCheckinView = new URLSearchParams(window.location.search).get('checkin') === '1';
-document.body.dataset.view = isCheckinView ? 'checkin' : 'dashboard';
+const viewParams = new URLSearchParams(window.location.search);
+const isCheckinView = viewParams.get('checkin') === '1';
+const isDisplayView = viewParams.get('display') === '1';
+document.body.dataset.view = isDisplayView ? 'display' : (isCheckinView ? 'checkin' : 'dashboard');
 
 init();
 
@@ -302,6 +324,9 @@ async function init() {
   loadStaffPin();
   setShareableLink();
   await refreshData();
+  if (isCheckinView) {
+    loadSavedTicket();
+  }
   connectSocket();
   startPolling();
 }
@@ -415,7 +440,7 @@ function setStaffUnlocked(value) {
 
 function setupStaffLock() {
   if (!dom.staffLock) return;
-  if (isCheckinView) {
+  if (isCheckinView || isDisplayView) {
     hideStaffLock();
     return;
   }
@@ -638,6 +663,10 @@ function bindEvents() {
     dom.checkinForm.addEventListener('submit', handleCheckinSubmit);
   }
 
+  if (dom.quickCheckin) {
+    dom.quickCheckin.addEventListener('click', handleQuickCheckin);
+  }
+
   if (dom.copyCheckin) {
     dom.copyCheckin.addEventListener('click', () => copyCheckinLink(dom.copyCheckin));
   }
@@ -725,6 +754,7 @@ async function fetchQueue() {
 function renderAll() {
   renderDashboard();
   renderServices();
+  renderDisplay();
 }
 
 function renderDashboard() {
@@ -809,6 +839,15 @@ function renderDashboard() {
 
     dom.queueTableBody.appendChild(row);
   });
+}
+
+function renderDisplay() {
+  if (!dom.displayNow || !dom.displayNext) return;
+  const orderedQueue = sortByTime(getActiveQueue());
+  const nowEntry = orderedQueue[0];
+  const nextEntry = orderedQueue[1];
+  dom.displayNow.textContent = getEntryTicket(nowEntry, 0) || '—';
+  dom.displayNext.textContent = getEntryTicket(nextEntry, 1) || '—';
 }
 
 function renderServices() {
@@ -922,13 +961,24 @@ async function handleCheckinSubmit(event) {
   const name = dom.checkinName.value.trim();
   const phone = dom.checkinPhone.value.trim();
 
-  if (!name || !phone) return;
+  const payload = {
+    name: name || null,
+    phone: phone || null
+  };
 
-  const payload = { name, phone };
   const entry = await createCheckin(payload);
   await refreshData();
 
   dom.checkinForm.reset();
+  persistTicket(entry);
+  showCheckinStatus(entry.id, entry.ticketNumber);
+}
+
+async function handleQuickCheckin() {
+  const payload = { name: null, phone: null };
+  const entry = await createCheckin(payload);
+  await refreshData();
+  persistTicket(entry);
   showCheckinStatus(entry.id, entry.ticketNumber);
 }
 
@@ -955,8 +1005,20 @@ function updateCheckinStatus() {
   const orderedQueue = sortByTime(getActiveQueue());
   const positionIndex = orderedQueue.findIndex((item) => item.id === entryId);
   if (positionIndex === -1) {
+    const servedEntry = queue.find((item) => item.id === entryId);
+    if (servedEntry && ['served', 'canceled'].includes(servedEntry.status)) {
+      clearSavedTicket();
+      hideTicketDisplay();
+      dom.checkinStatus.textContent = '';
+      dom.checkinStatus.classList.remove('active');
+      return;
+    }
+
     dom.checkinStatus.textContent = t('checkin.status.generic');
     dom.checkinStatus.classList.add('active');
+    if (storedTicket) {
+      showTicketDisplay(storedTicket);
+    }
     return;
   }
 
@@ -968,6 +1030,52 @@ function updateCheckinStatus() {
 
   dom.checkinStatus.textContent = t('checkin.status.position', { position, etaText, ticket });
   dom.checkinStatus.classList.add('active');
+  showTicketDisplay(ticket);
+}
+
+function showTicketDisplay(ticket) {
+  if (!dom.ticketDisplay || !dom.ticketNumberDisplay) return;
+  if (!ticket) return;
+  dom.ticketNumberDisplay.textContent = ticket;
+  dom.ticketDisplay.classList.add('active');
+}
+
+function hideTicketDisplay() {
+  if (!dom.ticketDisplay) return;
+  dom.ticketDisplay.classList.remove('active');
+}
+
+function persistTicket(entry) {
+  if (!entry || !entry.id) return;
+  localStorage.setItem(LOCAL_KEYS.ticketEntryId, entry.id);
+  if (entry.ticketNumber) {
+    localStorage.setItem(LOCAL_KEYS.ticketNumber, String(entry.ticketNumber));
+  }
+  if (entry.branchId) {
+    localStorage.setItem(LOCAL_KEYS.ticketBranchId, entry.branchId);
+  }
+}
+
+function clearSavedTicket() {
+  localStorage.removeItem(LOCAL_KEYS.ticketEntryId);
+  localStorage.removeItem(LOCAL_KEYS.ticketNumber);
+  localStorage.removeItem(LOCAL_KEYS.ticketBranchId);
+  if (dom.checkinStatus) {
+    dom.checkinStatus.dataset.entryId = '';
+    dom.checkinStatus.dataset.ticketNumber = '';
+  }
+}
+
+function loadSavedTicket() {
+  const entryId = localStorage.getItem(LOCAL_KEYS.ticketEntryId);
+  const ticketNumber = localStorage.getItem(LOCAL_KEYS.ticketNumber);
+  const ticketBranchId = localStorage.getItem(LOCAL_KEYS.ticketBranchId);
+  if (!entryId) return;
+  if (ticketBranchId && currentBranch && ticketBranchId !== currentBranch.id) {
+    clearSavedTicket();
+    return;
+  }
+  showCheckinStatus(entryId, ticketNumber);
 }
 
 async function updateStatus(entryId, status) {
