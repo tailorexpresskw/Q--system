@@ -112,6 +112,21 @@ async function initDatabase() {
   }
 }
 
+async function getDefaultServiceId() {
+  const result = await pool.query('SELECT id FROM services ORDER BY created_at LIMIT 1');
+  if (result.rowCount) {
+    return result.rows[0].id;
+  }
+
+  const fallback = DEFAULT_SERVICES[0] || { name: 'Standard', avgMinutes: 10 };
+  const id = crypto.randomUUID();
+  await pool.query(
+    'INSERT INTO services (id, name, avg_minutes) VALUES ($1, $2, $3)',
+    [id, fallback.name, fallback.avgMinutes]
+  );
+  return id;
+}
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
@@ -212,15 +227,19 @@ app.post('/api/checkin', async (req, res, next) => {
   try {
     const name = String(req.body.name || '').trim();
     const phone = String(req.body.phone || '').trim();
-    const serviceId = String(req.body.serviceId || '').trim();
+    let serviceId = String(req.body.serviceId || '').trim();
 
-    if (!name || !phone || !serviceId) {
+    if (!name || !phone) {
       return res.status(400).json({ error: 'Invalid check-in payload.' });
     }
 
-    const serviceCheck = await pool.query('SELECT id FROM services WHERE id = $1', [serviceId]);
-    if (!serviceCheck.rowCount) {
-      return res.status(400).json({ error: 'Service not found.' });
+    if (serviceId) {
+      const serviceCheck = await pool.query('SELECT id FROM services WHERE id = $1', [serviceId]);
+      if (!serviceCheck.rowCount) {
+        return res.status(400).json({ error: 'Service not found.' });
+      }
+    } else {
+      serviceId = await getDefaultServiceId();
     }
 
     const id = crypto.randomUUID();

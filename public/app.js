@@ -1,8 +1,212 @@
-'use strict';
+﻿'use strict';
 
 const API_BASE = '/api';
 const LOCAL_KEYS = {
-  staffPin: 'qsys.staffPin'
+  staffPin: 'qsys.staffPin',
+  lang: 'qsys.lang'
+};
+
+const SUPPORTED_LANGS = ['en', 'ar'];
+const LANG_META = {
+  en: { locale: 'en-US', dir: 'ltr' },
+  ar: { locale: 'ar', dir: 'rtl' }
+};
+
+const translations = {
+  en: {
+    'app.title': 'Q System',
+    'brand.subtitle': 'Live queue control with realtime sync.',
+    'header.copyCheckin': 'Copy check-in link',
+    'header.openCheckin': 'Open check-in',
+    'language.label': 'Language',
+    'language.english': 'English',
+    'language.arabic': 'Arabic',
+    'metrics.active': 'Active in queue',
+    'metrics.totalWait': 'Estimated total wait',
+    'metrics.avgService': 'Average service time',
+    'metrics.lastCheckin': 'Last check-in',
+    'queue.title': 'Live Queue',
+    'queue.subtitle': 'ETAs are driven by service averages and queue order.',
+    'queue.refresh': 'Refresh',
+    'queue.exportCsv': 'Export CSV',
+    'queue.nowServing': 'Now serving',
+    'queue.nextUp': 'Next up',
+    'queue.projectedFinish': 'Projected finish',
+    'queue.empty': 'No active check-ins yet.',
+    'queue.guest': 'Guest',
+    'queue.waitMinutes': '{minutes} min',
+    'queue.etaMinutes': '{minutes} min ({time})',
+    'queue.etaNow': 'Now',
+    'table.number': '#',
+    'table.name': 'Name',
+    'table.phone': 'Phone',
+    'table.service': 'Service',
+    'table.status': 'Status',
+    'table.wait': 'Wait',
+    'table.eta': 'ETA',
+    'table.actions': 'Actions',
+    'share.title': 'Public Check-In',
+    'share.subtitle': 'Share this link or QR code to accept arrivals.',
+    'share.copy': 'Copy link',
+    'share.qrAlt': 'QR code for check-in link',
+    'share.qrNote': 'QR code generated from the current check-in URL.',
+    'share.dataNote': 'Data is synced via the backend database.',
+    'pin.title': 'Staff PIN',
+    'pin.subtitle': 'Required for staff actions like notify, serve, cancel, and service edits.',
+    'pin.placeholder': 'Enter PIN',
+    'pin.save': 'Save',
+    'pin.status.empty': 'Enter the staff PIN to unlock actions.',
+    'pin.status.saved': 'PIN saved for this device.',
+    'pin.status.cleared': 'PIN cleared. Enter the staff PIN to unlock actions.',
+    'pin.status.invalid': 'Invalid PIN. Please re-enter.',
+    'services.title': 'Services',
+    'services.subtitle': 'Average service time (minutes) drives ETA math.',
+    'services.add': 'Add service',
+    'services.empty': 'No services yet. Add one to begin.',
+    'service.new': 'New service',
+    'service.default': 'Service',
+    'service.remove': 'Remove',
+    'checkin.chip': 'Public check-in',
+    'checkin.title': 'Join the queue',
+    'checkin.subtitle': 'Enter your details to reserve your spot.',
+    'checkin.nameLabel': 'Full name',
+    'checkin.namePlaceholder': 'Alex Johnson',
+    'checkin.phoneLabel': 'Phone',
+    'checkin.phonePlaceholder': '(555) 555-0199',
+    'checkin.serviceLabel': 'Service',
+    'checkin.submit': 'Check in',
+    'checkin.status.generic': 'Checked in successfully. Your spot will update shortly.',
+    'checkin.status.position': 'Checked in successfully. Position {position}. ETA: {etaText}.',
+    'checkin.eta.now': 'Now',
+    'checkin.eta.approx': '~{minutes} min (around {time})',
+    'checkin.serviceOption': '{name} ({minutes} min)',
+    'checkin.noServices': 'No services available',
+    'help.title': 'How it works',
+    'help.subtitle': 'Your ETA is calculated from the queue ahead of you and the service time averages.',
+    'help.item1': 'Queue position updates in real time.',
+    'help.item2': 'Notifications are handled by staff on the dashboard.',
+    'help.item3': 'Everything stays synced across devices.',
+    'help.backToStaff': 'Staff dashboard',
+    'footer.left': 'Q System · Realtime queue',
+    'footer.right': 'Use ?checkin=1 for the public check-in view.',
+    'action.notify': 'Notify',
+    'action.serve': 'Serve',
+    'action.cancel': 'Cancel',
+    'status.waiting': 'Waiting',
+    'status.notified': 'Notified',
+    'status.served': 'Served',
+    'status.canceled': 'Canceled',
+    'copy.copied': 'Copied',
+    'copy.failed': 'Copy failed',
+    'confirm.removeService': 'This service is used in the active queue. Remove it anyway?',
+    'prompt.staffPin': 'Enter staff PIN',
+    'csv.id': 'id',
+    'csv.name': 'name',
+    'csv.phone': 'phone',
+    'csv.service': 'service',
+    'csv.status': 'status',
+    'csv.created_at': 'created_at',
+    'csv.notified_at': 'notified_at',
+    'csv.served_at': 'served_at',
+    'csv.canceled_at': 'canceled_at'
+  },
+  ar: {
+    'app.title': 'نظام Q',
+    'brand.subtitle': 'تحكم مباشر بالطابور مع مزامنة فورية.',
+    'header.copyCheckin': 'نسخ رابط التسجيل',
+    'header.openCheckin': 'فتح التسجيل',
+    'language.label': 'اللغة',
+    'language.english': 'الإنجليزية',
+    'language.arabic': 'العربية',
+    'metrics.active': 'النشطون في الطابور',
+    'metrics.totalWait': 'إجمالي الانتظار المتوقع',
+    'metrics.avgService': 'متوسط وقت الخدمة',
+    'metrics.lastCheckin': 'آخر تسجيل',
+    'queue.title': 'الطابور المباشر',
+    'queue.subtitle': 'تُحسب الأوقات المتوقعة بناءً على متوسطات الخدمة وترتيب الطابور.',
+    'queue.refresh': 'تحديث',
+    'queue.exportCsv': 'تصدير CSV',
+    'queue.nowServing': 'يُخدم الآن',
+    'queue.nextUp': 'التالي',
+    'queue.projectedFinish': 'الانتهاء المتوقع',
+    'queue.empty': 'لا توجد تسجيلات نشطة بعد.',
+    'queue.guest': 'ضيف',
+    'queue.waitMinutes': '{minutes} دقيقة',
+    'queue.etaMinutes': '{minutes} دقيقة ({time})',
+    'queue.etaNow': 'الآن',
+    'table.number': '#',
+    'table.name': 'الاسم',
+    'table.phone': 'الهاتف',
+    'table.service': 'الخدمة',
+    'table.status': 'الحالة',
+    'table.wait': 'الانتظار',
+    'table.eta': 'الوقت المتوقع',
+    'table.actions': 'إجراءات',
+    'share.title': 'تسجيل عام',
+    'share.subtitle': 'شارك هذا الرابط أو رمز QR لقبول القادمين.',
+    'share.copy': 'نسخ الرابط',
+    'share.qrAlt': 'رمز QR لرابط التسجيل',
+    'share.qrNote': 'تم إنشاء رمز QR من رابط التسجيل الحالي.',
+    'share.dataNote': 'تتم المزامنة عبر قاعدة بيانات الخادم.',
+    'pin.title': 'رمز الموظفين',
+    'pin.subtitle': 'مطلوب لإجراءات الموظفين مثل الإشعار، الخدمة، الإلغاء، وتعديل الخدمات.',
+    'pin.placeholder': 'أدخل الرمز',
+    'pin.save': 'حفظ',
+    'pin.status.empty': 'أدخل رمز الموظفين لفتح الإجراءات.',
+    'pin.status.saved': 'تم حفظ الرمز على هذا الجهاز.',
+    'pin.status.cleared': 'تم مسح الرمز. أدخل رمز الموظفين لفتح الإجراءات.',
+    'pin.status.invalid': 'رمز غير صحيح. يُرجى إعادة الإدخال.',
+    'services.title': 'الخدمات',
+    'services.subtitle': 'متوسط وقت الخدمة (بالدقائق) يحدد حسابات الوقت المتوقع.',
+    'services.add': 'إضافة خدمة',
+    'services.empty': 'لا توجد خدمات بعد. أضف واحدة للبدء.',
+    'service.new': 'خدمة جديدة',
+    'service.default': 'خدمة',
+    'service.remove': 'إزالة',
+    'checkin.chip': 'تسجيل عام',
+    'checkin.title': 'انضم إلى الطابور',
+    'checkin.subtitle': 'أدخل بياناتك لحجز دورك.',
+    'checkin.nameLabel': 'الاسم الكامل',
+    'checkin.namePlaceholder': 'أحمد محمد',
+    'checkin.phoneLabel': 'الهاتف',
+    'checkin.phonePlaceholder': '050 000 0000',
+    'checkin.serviceLabel': 'الخدمة',
+    'checkin.submit': 'تسجيل',
+    'checkin.status.generic': 'تم التسجيل بنجاح. سيتم تحديث دورك قريبًا.',
+    'checkin.status.position': 'تم التسجيل بنجاح. الترتيب {position}. الوقت المتوقع: {etaText}.',
+    'checkin.eta.now': 'الآن',
+    'checkin.eta.approx': '~{minutes} دقيقة (حوالي {time})',
+    'checkin.serviceOption': '{name} ({minutes} دقيقة)',
+    'checkin.noServices': 'لا توجد خدمات متاحة',
+    'help.title': 'كيف يعمل',
+    'help.subtitle': 'يتم حساب وقتك المتوقع بناءً على من قبلك في الطابور ومتوسطات وقت الخدمة.',
+    'help.item1': 'يتم تحديث ترتيبك في الوقت الحقيقي.',
+    'help.item2': 'يتولى الموظفون الإشعارات عبر لوحة التحكم.',
+    'help.item3': 'يبقى كل شيء متزامنًا عبر الأجهزة.',
+    'help.backToStaff': 'لوحة الموظفين',
+    'footer.left': 'نظام Q · طابور فوري',
+    'footer.right': 'استخدم ?checkin=1 لعرض صفحة التسجيل العامة.',
+    'action.notify': 'إشعار',
+    'action.serve': 'خدمة',
+    'action.cancel': 'إلغاء',
+    'status.waiting': 'بانتظار',
+    'status.notified': 'تم الإشعار',
+    'status.served': 'تمت الخدمة',
+    'status.canceled': 'ملغي',
+    'copy.copied': 'تم النسخ',
+    'copy.failed': 'فشل النسخ',
+    'confirm.removeService': 'هذه الخدمة مستخدمة في الطابور النشط. هل تريد إزالتها رغم ذلك؟',
+    'prompt.staffPin': 'أدخل رمز الموظفين',
+    'csv.id': 'المعرف',
+    'csv.name': 'الاسم',
+    'csv.phone': 'الهاتف',
+    'csv.service': 'الخدمة',
+    'csv.status': 'الحالة',
+    'csv.created_at': 'تاريخ الإنشاء',
+    'csv.notified_at': 'وقت الإشعار',
+    'csv.served_at': 'وقت الخدمة',
+    'csv.canceled_at': 'وقت الإلغاء'
+  }
 };
 
 const dom = {
@@ -16,17 +220,15 @@ const dom = {
   queueTableBody: document.querySelector('#queueTable tbody'),
   checkinLink: document.getElementById('checkinLink'),
   qrImage: document.getElementById('qrImage'),
-  servicesList: document.getElementById('servicesList'),
   checkinForm: document.getElementById('checkinForm'),
   checkinName: document.getElementById('checkinName'),
   checkinPhone: document.getElementById('checkinPhone'),
-  checkinService: document.getElementById('checkinService'),
   checkinStatus: document.getElementById('checkinStatus'),
   copyCheckin: document.getElementById('copyCheckin'),
   copyCheckinHeader: document.getElementById('copyCheckinHeader'),
+  languageSelect: document.getElementById('languageSelect'),
   refreshQueue: document.getElementById('refreshQueue'),
   exportCsv: document.getElementById('exportCsv'),
-  addService: document.getElementById('addService'),
   staffPinInput: document.getElementById('staffPinInput'),
   saveStaffPin: document.getElementById('saveStaffPin'),
   staffPinStatus: document.getElementById('staffPinStatus')
@@ -36,6 +238,8 @@ let services = [];
 let queue = [];
 let socket = null;
 let refreshTimer = null;
+let currentLang = 'en';
+let currentLocale = LANG_META.en.locale;
 
 const isCheckinView = new URLSearchParams(window.location.search).get('checkin') === '1';
 document.body.dataset.view = isCheckinView ? 'checkin' : 'dashboard';
@@ -44,11 +248,90 @@ init();
 
 async function init() {
   bindEvents();
+  applyLanguage(getInitialLang());
   loadStaffPin();
   setShareableLink();
   await refreshData();
   connectSocket();
   startPolling();
+}
+
+function normalizeLang(value) {
+  if (!value) return '';
+  const lower = value.toLowerCase();
+  if (lower.startsWith('ar')) return 'ar';
+  if (lower.startsWith('en')) return 'en';
+  return '';
+}
+
+function getInitialLang() {
+  const params = new URLSearchParams(window.location.search);
+  const queryLang = normalizeLang(params.get('lang'));
+  const storedLang = normalizeLang(localStorage.getItem(LOCAL_KEYS.lang));
+  const browserLang = normalizeLang(navigator.language || '');
+  return queryLang || storedLang || browserLang || 'en';
+}
+
+function applyLanguage(lang) {
+  const normalized = normalizeLang(lang) || 'en';
+  currentLang = normalized;
+  const meta = LANG_META[normalized] || LANG_META.en;
+  currentLocale = meta.locale;
+  document.documentElement.lang = normalized;
+  document.documentElement.dir = meta.dir;
+  localStorage.setItem(LOCAL_KEYS.lang, normalized);
+  if (dom.languageSelect) {
+    dom.languageSelect.value = normalized;
+    dom.languageSelect.setAttribute('aria-label', t('language.label'));
+  }
+  document.title = t('app.title');
+  translateStatic();
+  renderAll();
+  updateCheckinStatus();
+  updatePinStatus();
+}
+
+function translateStatic() {
+  document.querySelectorAll('[data-i18n]').forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
+    element.placeholder = t(element.dataset.i18nPlaceholder);
+  });
+
+  document.querySelectorAll('[data-i18n-alt]').forEach((element) => {
+    element.alt = t(element.dataset.i18nAlt);
+  });
+}
+
+function t(key, values = {}) {
+  const langTable = translations[currentLang] || translations.en;
+  const fallbackTable = translations.en;
+  const template = langTable[key] || fallbackTable[key] || key;
+  return template.replace(/\{(\w+)\}/g, (match, token) => {
+    if (values[token] === undefined || values[token] === null) return match;
+    return String(values[token]);
+  });
+}
+
+function formatMinutes(minutes) {
+  return t('queue.waitMinutes', { minutes });
+}
+
+function formatEtaLabel(minutes) {
+  if (!minutes) return t('queue.etaNow');
+  return t('queue.etaMinutes', { minutes, time: formatEtaTime(minutes) });
+}
+
+function formatCheckinEtaText(minutes) {
+  if (!minutes) return t('checkin.eta.now');
+  return t('checkin.eta.approx', { minutes, time: formatEtaTime(minutes) });
+}
+
+function getStatusLabel(status) {
+  const label = t(`status.${status}`);
+  return label.startsWith('status.') ? status : label;
 }
 
 function bindEvents() {
@@ -62,6 +345,12 @@ function bindEvents() {
 
   if (dom.copyCheckinHeader) {
     dom.copyCheckinHeader.addEventListener('click', () => copyCheckinLink(dom.copyCheckinHeader));
+  }
+
+  if (dom.languageSelect) {
+    dom.languageSelect.addEventListener('change', (event) => {
+      applyLanguage(event.target.value);
+    });
   }
 
   if (dom.refreshQueue) {
@@ -81,11 +370,11 @@ function bindEvents() {
       const pin = dom.staffPinInput ? dom.staffPinInput.value.trim() : '';
       if (!pin) {
         clearStaffPin();
-        updatePinStatus('PIN cleared. Enter the staff PIN to unlock actions.');
+        updatePinStatus('pin.status.cleared');
         return;
       }
       setStaffPin(pin);
-      updatePinStatus('PIN saved for this device.');
+      updatePinStatus('pin.status.saved');
     });
   }
 }
@@ -95,7 +384,7 @@ function loadStaffPin() {
   if (dom.staffPinInput) {
     dom.staffPinInput.value = pin;
   }
-  updatePinStatus(pin ? 'PIN saved for this device.' : 'Enter the staff PIN to unlock actions.');
+  updatePinStatus(pin ? 'pin.status.saved' : 'pin.status.empty');
 }
 
 function startPolling() {
@@ -111,6 +400,7 @@ async function refreshData() {
     services = servicesData;
     queue = queueData;
     renderAll();
+    updateCheckinStatus();
   } catch (error) {
     console.warn('Failed to refresh data.', error);
   }
@@ -135,7 +425,6 @@ async function fetchQueue() {
 function renderAll() {
   renderDashboard();
   renderServices();
-  renderCheckinServices();
 }
 
 function renderDashboard() {
@@ -153,23 +442,23 @@ function renderDashboard() {
     .pop();
 
   dom.metricActive.textContent = String(orderedQueue.length);
-  dom.metricTotalWait.textContent = `${totalWait} min`;
-  dom.metricAvgService.textContent = `${avgService} min`;
-  dom.metricLastCheckin.textContent = lastCheckin ? formatTime(lastCheckin) : '�';
+  dom.metricTotalWait.textContent = formatMinutes(totalWait);
+  dom.metricAvgService.textContent = formatMinutes(avgService);
+  dom.metricLastCheckin.textContent = lastCheckin ? formatTime(lastCheckin) : '—';
 
   const nowEntry = orderedQueue[0];
   const nextEntry = orderedQueue[1];
-  dom.nowServing.textContent = nowEntry ? `${nowEntry.name} � ${getServiceName(nowEntry.serviceId)}` : '�';
-  dom.nextUp.textContent = nextEntry ? `${nextEntry.name} � ${getServiceName(nextEntry.serviceId)}` : '�';
-  dom.projectedFinish.textContent = totalWait ? formatEtaTime(totalWait) : '�';
+  dom.nowServing.textContent = nowEntry ? (nowEntry.name || t('queue.guest')) : '—';
+  dom.nextUp.textContent = nextEntry ? (nextEntry.name || t('queue.guest')) : '—';
+  dom.projectedFinish.textContent = totalWait ? formatEtaTime(totalWait) : '—';
 
   dom.queueTableBody.innerHTML = '';
 
   if (!orderedQueue.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
-    cell.textContent = 'No active check-ins yet.';
+    cell.colSpan = 7;
+    cell.textContent = t('queue.empty');
     cell.className = 'muted';
     row.appendChild(cell);
     dom.queueTableBody.appendChild(row);
@@ -185,32 +474,31 @@ function renderDashboard() {
     const row = document.createElement('tr');
 
     row.appendChild(createCell(String(index + 1)));
-    row.appendChild(createCell(entry.name || 'Guest'));
-    row.appendChild(createCell(entry.phone || '�'));
-    row.appendChild(createCell(getServiceName(entry.serviceId)));
+    row.appendChild(createCell(entry.name || t('queue.guest')));
+    row.appendChild(createCell(entry.phone || '—'));
 
     const statusCell = document.createElement('td');
     const badge = document.createElement('span');
     badge.className = `status-badge status-${entry.status}`;
-    badge.textContent = entry.status;
+    badge.textContent = getStatusLabel(entry.status);
     statusCell.appendChild(badge);
     row.appendChild(statusCell);
 
-    row.appendChild(createCell(`${waitMinutes} min`));
-    row.appendChild(createCell(etaMinutes ? `${etaMinutes} min (${formatEtaTime(etaMinutes)})` : 'Now'));
+    row.appendChild(createCell(formatMinutes(waitMinutes)));
+    row.appendChild(createCell(formatEtaLabel(etaMinutes)));
 
     const actionsCell = document.createElement('td');
     const actionsWrap = document.createElement('div');
     actionsWrap.className = 'row-actions';
 
-    const notifyBtn = createActionButton('Notify', 'ghost');
+    const notifyBtn = createActionButton(t('action.notify'), 'ghost');
     notifyBtn.disabled = entry.status === 'notified';
     notifyBtn.addEventListener('click', () => updateStatus(entry.id, 'notified'));
 
-    const serveBtn = createActionButton('Serve', 'primary');
+    const serveBtn = createActionButton(t('action.serve'), 'primary');
     serveBtn.addEventListener('click', () => updateStatus(entry.id, 'served'));
 
-    const cancelBtn = createActionButton('Cancel', 'danger');
+    const cancelBtn = createActionButton(t('action.cancel'), 'danger');
     cancelBtn.addEventListener('click', () => updateStatus(entry.id, 'canceled'));
 
     actionsWrap.appendChild(notifyBtn);
@@ -231,7 +519,7 @@ function renderServices() {
   if (!services.length) {
     const empty = document.createElement('p');
     empty.className = 'muted';
-    empty.textContent = 'No services yet. Add one to begin.';
+    empty.textContent = t('services.empty');
     dom.servicesList.appendChild(empty);
     return;
   }
@@ -250,7 +538,7 @@ function renderServices() {
     avgInput.value = String(service.avgMinutes);
 
     const updateServiceData = async () => {
-      const name = nameInput.value.trim() || 'Service';
+      const name = nameInput.value.trim() || t('service.default');
       const value = Number(avgInput.value);
       const avgMinutes = Number.isFinite(value) && value > 0 ? Math.round(value) : 10;
       avgInput.value = String(avgMinutes);
@@ -269,7 +557,7 @@ function renderServices() {
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn danger';
     removeBtn.type = 'button';
-    removeBtn.textContent = 'Remove';
+    removeBtn.textContent = t('service.remove');
     removeBtn.addEventListener('click', () => removeService(service.id));
 
     row.appendChild(nameInput);
@@ -286,7 +574,7 @@ function renderCheckinServices() {
   dom.checkinService.innerHTML = '';
 
   if (!services.length) {
-    const option = new Option('No services available', '');
+    const option = new Option(t('checkin.noServices'), '');
     option.disabled = true;
     option.selected = true;
     dom.checkinService.appendChild(option);
@@ -295,7 +583,10 @@ function renderCheckinServices() {
   }
 
   services.forEach((service) => {
-    const option = new Option(`${service.name} (${service.avgMinutes} min)`, service.id);
+    const option = new Option(
+      t('checkin.serviceOption', { name: service.name, minutes: service.avgMinutes }),
+      service.id
+    );
     dom.checkinService.appendChild(option);
   });
 
@@ -311,13 +602,13 @@ function toggleCheckinSubmit(enabled) {
 }
 
 async function addServiceRow() {
-  await createService({ name: 'New service', avgMinutes: 15 });
+  await createService({ name: t('service.new'), avgMinutes: 15 });
   await refreshData();
 }
 
 async function removeService(serviceId) {
   const usedInQueue = queue.some((entry) => entry.serviceId === serviceId && !['served', 'canceled'].includes(entry.status));
-  if (usedInQueue && !window.confirm('This service is used in the active queue. Remove it anyway?')) {
+  if (usedInQueue && !window.confirm(t('confirm.removeService'))) {
     return;
   }
 
@@ -330,11 +621,11 @@ async function handleCheckinSubmit(event) {
 
   const name = dom.checkinName.value.trim();
   const phone = dom.checkinPhone.value.trim();
-  const serviceId = dom.checkinService.value;
 
-  if (!name || !phone || !serviceId) return;
+  if (!name || !phone) return;
 
-  const entry = await createCheckin({ name, phone, serviceId });
+  const payload = { name, phone };
+  const entry = await createCheckin(payload);
   await refreshData();
 
   dom.checkinForm.reset();
@@ -342,19 +633,29 @@ async function handleCheckinSubmit(event) {
 }
 
 function showCheckinStatus(entryId) {
+  if (!dom.checkinStatus) return;
+  dom.checkinStatus.dataset.entryId = entryId;
+  updateCheckinStatus();
+}
+
+function updateCheckinStatus() {
+  if (!dom.checkinStatus) return;
+  const entryId = dom.checkinStatus.dataset.entryId;
+  if (!entryId) return;
+
   const orderedQueue = sortByTime(getActiveQueue());
   const positionIndex = orderedQueue.findIndex((item) => item.id === entryId);
   if (positionIndex === -1) {
-    dom.checkinStatus.innerHTML = 'Checked in successfully. Your spot will update shortly.';
+    dom.checkinStatus.textContent = t('checkin.status.generic');
     dom.checkinStatus.classList.add('active');
     return;
   }
 
   const position = positionIndex + 1;
   const etaMinutes = calculateEtaForEntry(entryId, orderedQueue);
-  const etaText = etaMinutes === 0 ? 'Now' : `~${etaMinutes} min (around ${formatEtaTime(etaMinutes)})`;
+  const etaText = formatCheckinEtaText(etaMinutes);
 
-  dom.checkinStatus.innerHTML = `Checked in successfully. Position ${position}. ETA: ${etaText}.`;
+  dom.checkinStatus.textContent = t('checkin.status.position', { position, etaText });
   dom.checkinStatus.classList.add('active');
 }
 
@@ -379,7 +680,7 @@ function getServiceMinutes(serviceId) {
 
 function getServiceName(serviceId) {
   const service = services.find((item) => item.id === serviceId);
-  return service ? service.name : 'Service';
+  return service ? service.name : t('service.default');
 }
 
 function calculateEtaForEntry(entryId, orderedQueue) {
@@ -415,10 +716,10 @@ async function copyCheckinLink(button) {
       dom.checkinLink.select();
       document.execCommand('copy');
     }
-    flashButton(button, 'Copied');
+    flashButton(button, t('copy.copied'));
   } catch (error) {
     console.warn('Copy failed.', error);
-    flashButton(button, 'Copy failed');
+    flashButton(button, t('copy.failed'));
   }
 }
 
@@ -435,22 +736,20 @@ function exportToCsv() {
   if (!queue.length) return;
 
   const headers = [
-    'id',
-    'name',
-    'phone',
-    'service',
-    'status',
-    'created_at',
-    'notified_at',
-    'served_at',
-    'canceled_at'
+    t('csv.id'),
+    t('csv.name'),
+    t('csv.phone'),
+    t('csv.status'),
+    t('csv.created_at'),
+    t('csv.notified_at'),
+    t('csv.served_at'),
+    t('csv.canceled_at')
   ];
 
   const rows = queue.map((entry) => [
     entry.id,
     entry.name,
     entry.phone,
-    getServiceName(entry.serviceId),
     entry.status,
     entry.createdAt,
     entry.notifiedAt || '',
@@ -496,14 +795,14 @@ function createActionButton(label, variant) {
 }
 
 function formatTime(value) {
-  if (!value) return '�';
+  if (!value) return '—';
   const date = new Date(value);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatEtaTime(minutes) {
   const date = new Date(Date.now() + minutes * 60000);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
 }
 
 async function createCheckin(payload) {
@@ -605,23 +904,25 @@ function clearStaffPin() {
 function ensureStaffPin() {
   let pin = getStaffPin();
   if (!pin) {
-    pin = window.prompt('Enter staff PIN');
+    pin = window.prompt(t('prompt.staffPin'));
     if (!pin) return '';
     setStaffPin(pin.trim());
-    updatePinStatus('PIN saved for this device.');
+    updatePinStatus('pin.status.saved');
   }
   return pin;
 }
 
-function updatePinStatus(message) {
-  if (dom.staffPinStatus) {
-    dom.staffPinStatus.textContent = message;
-  }
+function updatePinStatus(key) {
+  if (!dom.staffPinStatus) return;
+  const nextKey = key || dom.staffPinStatus.dataset.statusKey;
+  if (!nextKey) return;
+  dom.staffPinStatus.dataset.statusKey = nextKey;
+  dom.staffPinStatus.textContent = t(nextKey);
 }
 
 function handleUnauthorized() {
   clearStaffPin();
-  updatePinStatus('Invalid PIN. Please re-enter.');
+  updatePinStatus('pin.status.invalid');
 }
 
 function connectSocket() {
@@ -647,3 +948,4 @@ function connectSocket() {
     setTimeout(() => connectSocket(), 2000);
   });
 }
+

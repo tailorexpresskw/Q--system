@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Tajawal:wght@400;500;600;700&display=swap');
 
 :root {
   color-scheme: light;
@@ -94,6 +94,17 @@ h3 {
   flex-wrap: wrap;
 }
 
+.lang-switch {
+  display: grid;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.lang-switch .small {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .view {
   padding: 24px 6vw 40px;
 }
@@ -129,8 +140,7 @@ h3 {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   grid-template-areas:
-    "queue share"
-    "queue services";
+    "queue share";
   gap: 24px;
 }
 
@@ -153,9 +163,6 @@ h3 {
   grid-area: share;
 }
 
-.services-panel {
-  grid-area: services;
-}
 
 .panel-header {
   display: flex;
@@ -465,8 +472,7 @@ label {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "queue"
-      "share"
-      "services";
+      "share";
   }
 
   .queue-highlight {
@@ -507,4 +513,31 @@ label {
     width: 100%;
     justify-content: center;
   }
+}
+
+html[dir="rtl"] body {
+  font-family: 'Tajawal', 'Space Grotesk', sans-serif;
+}
+
+html[dir="rtl"] .site-header,
+html[dir="rtl"] .panel-header {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .header-actions,
+html[dir="rtl"] .panel-actions,
+html[dir="rtl"] .row-actions,
+html[dir="rtl"] .share-link,
+html[dir="rtl"] .pin-row {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .inline-list {
+  padding-left: 0;
+  padding-right: 18px;
+}
+
+html[dir="rtl"] thead th,
+html[dir="rtl"] tbody td {
+  text-align: right;
 }
