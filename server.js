@@ -66,6 +66,7 @@ function mapQueue(row) {
     name: row.name,
     phone: row.phone,
     serviceId: row.service_id,
+    ticketNumber: row.ticket_number,
     status: row.status,
     createdAt: row.created_at,
     notifiedAt: row.notified_at,
@@ -90,6 +91,7 @@ async function initDatabase() {
       name text NOT NULL,
       phone text NOT NULL,
       service_id uuid NOT NULL REFERENCES services(id),
+      ticket_number integer,
       status text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       notified_at timestamptz,
@@ -97,6 +99,9 @@ async function initDatabase() {
       canceled_at timestamptz
     );
   `);
+
+  await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS ticket_number integer;`);
+  await pool.query('CREATE SEQUENCE IF NOT EXISTS queue_ticket_seq;');
 
   await pool.query('CREATE INDEX IF NOT EXISTS queue_created_at_idx ON queue (created_at);');
 
@@ -215,7 +220,7 @@ app.delete('/api/services/:id', requirePin, async (req, res, next) => {
 app.get('/api/queue', async (req, res, next) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, phone, service_id, status, created_at, notified_at, served_at, canceled_at FROM queue ORDER BY created_at'
+      'SELECT id, name, phone, service_id, ticket_number, status, created_at, notified_at, served_at, canceled_at FROM queue ORDER BY created_at'
     );
     res.json(result.rows.map(mapQueue));
   } catch (error) {
@@ -244,9 +249,9 @@ app.post('/api/checkin', async (req, res, next) => {
 
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO queue (id, name, phone, service_id, status)
-       VALUES ($1, $2, $3, $4, 'waiting')
-       RETURNING id, name, phone, service_id, status, created_at, notified_at, served_at, canceled_at`,
+      `INSERT INTO queue (id, name, phone, service_id, ticket_number, status)
+       VALUES ($1, $2, $3, $4, nextval('queue_ticket_seq'), 'waiting')
+       RETURNING id, name, phone, service_id, ticket_number, status, created_at, notified_at, served_at, canceled_at`,
       [id, name, phone, serviceId]
     );
 
@@ -279,7 +284,7 @@ app.post('/api/queue/:id/status', requirePin, async (req, res, next) => {
            served_at = CASE WHEN $2 = 'served' THEN $3 ELSE served_at END,
            canceled_at = CASE WHEN $2 = 'canceled' THEN $3 ELSE canceled_at END
        WHERE id = $4
-       RETURNING id, name, phone, service_id, status, created_at, notified_at, served_at, canceled_at`,
+       RETURNING id, name, phone, service_id, ticket_number, status, created_at, notified_at, served_at, canceled_at`,
       [status, status, timestamp, req.params.id]
     );
 

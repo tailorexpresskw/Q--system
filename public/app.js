@@ -32,12 +32,13 @@ const translations = {
     'queue.nowServing': 'Now serving',
     'queue.nextUp': 'Next up',
     'queue.projectedFinish': 'Projected finish',
+    'queue.ticketLabel': 'Q-{number}',
     'queue.empty': 'No active check-ins yet.',
     'queue.guest': 'Guest',
     'queue.waitMinutes': '{minutes} min',
     'queue.etaMinutes': '{minutes} min ({time})',
     'queue.etaNow': 'Now',
-    'table.number': '#',
+    'table.number': 'Ticket',
     'table.name': 'Name',
     'table.phone': 'Phone',
     'table.service': 'Service',
@@ -76,7 +77,7 @@ const translations = {
     'checkin.serviceLabel': 'Service',
     'checkin.submit': 'Check in',
     'checkin.status.generic': 'Checked in successfully. Your spot will update shortly.',
-    'checkin.status.position': 'Checked in successfully. Position {position}. ETA: {etaText}.',
+    'checkin.status.position': 'Checked in. Your number: {ticket}. Position {position}. ETA: {etaText}.',
     'checkin.eta.now': 'Now',
     'checkin.eta.approx': '~{minutes} min (around {time})',
     'checkin.serviceOption': '{name} ({minutes} min)',
@@ -101,6 +102,7 @@ const translations = {
     'confirm.removeService': 'This service is used in the active queue. Remove it anyway?',
     'prompt.staffPin': 'Enter staff PIN',
     'csv.id': 'id',
+    'csv.ticket': 'ticket',
     'csv.name': 'name',
     'csv.phone': 'phone',
     'csv.service': 'service',
@@ -129,12 +131,13 @@ const translations = {
     'queue.nowServing': 'يُخدم الآن',
     'queue.nextUp': 'التالي',
     'queue.projectedFinish': 'الانتهاء المتوقع',
+    'queue.ticketLabel': 'Q-{number}',
     'queue.empty': 'لا توجد تسجيلات نشطة بعد.',
     'queue.guest': 'ضيف',
     'queue.waitMinutes': '{minutes} دقيقة',
     'queue.etaMinutes': '{minutes} دقيقة ({time})',
     'queue.etaNow': 'الآن',
-    'table.number': '#',
+    'table.number': 'الرقم',
     'table.name': 'الاسم',
     'table.phone': 'الهاتف',
     'table.service': 'الخدمة',
@@ -173,7 +176,7 @@ const translations = {
     'checkin.serviceLabel': 'الخدمة',
     'checkin.submit': 'تسجيل',
     'checkin.status.generic': 'تم التسجيل بنجاح. سيتم تحديث دورك قريبًا.',
-    'checkin.status.position': 'تم التسجيل بنجاح. الترتيب {position}. الوقت المتوقع: {etaText}.',
+    'checkin.status.position': 'تم التسجيل. رقمك: {ticket}. الترتيب {position}. الوقت المتوقع: {etaText}.',
     'checkin.eta.now': 'الآن',
     'checkin.eta.approx': '~{minutes} دقيقة (حوالي {time})',
     'checkin.serviceOption': '{name} ({minutes} دقيقة)',
@@ -198,6 +201,7 @@ const translations = {
     'confirm.removeService': 'هذه الخدمة مستخدمة في الطابور النشط. هل تريد إزالتها رغم ذلك؟',
     'prompt.staffPin': 'أدخل رمز الموظفين',
     'csv.id': 'المعرف',
+    'csv.ticket': 'الرقم',
     'csv.name': 'الاسم',
     'csv.phone': 'الهاتف',
     'csv.service': 'الخدمة',
@@ -315,23 +319,49 @@ function t(key, values = {}) {
   });
 }
 
+function formatNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value ?? '');
+  return number.toLocaleString(currentLocale);
+}
+
 function formatMinutes(minutes) {
-  return t('queue.waitMinutes', { minutes });
+  return t('queue.waitMinutes', { minutes: formatNumber(minutes) });
 }
 
 function formatEtaLabel(minutes) {
   if (!minutes) return t('queue.etaNow');
-  return t('queue.etaMinutes', { minutes, time: formatEtaTime(minutes) });
+  return t('queue.etaMinutes', { minutes: formatNumber(minutes), time: formatEtaTime(minutes) });
 }
 
 function formatCheckinEtaText(minutes) {
   if (!minutes) return t('checkin.eta.now');
-  return t('checkin.eta.approx', { minutes, time: formatEtaTime(minutes) });
+  return t('checkin.eta.approx', { minutes: formatNumber(minutes), time: formatEtaTime(minutes) });
 }
 
 function getStatusLabel(status) {
   const label = t(`status.${status}`);
   return label.startsWith('status.') ? status : label;
+}
+
+function formatTicketNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return '';
+  return t('queue.ticketLabel', { number: formatNumber(number) });
+}
+
+function getEntryTicket(entry, fallbackIndex) {
+  if (!entry) return '';
+  const ticket = formatTicketNumber(entry.ticketNumber);
+  if (ticket) return ticket;
+  return formatTicketNumber(fallbackIndex + 1);
+}
+
+function formatNowServing(entry, fallbackIndex) {
+  if (!entry) return '—';
+  const ticket = getEntryTicket(entry, fallbackIndex);
+  const name = entry.name || t('queue.guest');
+  return ticket ? `${ticket} · ${name}` : name;
 }
 
 function bindEvents() {
@@ -448,8 +478,8 @@ function renderDashboard() {
 
   const nowEntry = orderedQueue[0];
   const nextEntry = orderedQueue[1];
-  dom.nowServing.textContent = nowEntry ? (nowEntry.name || t('queue.guest')) : '—';
-  dom.nextUp.textContent = nextEntry ? (nextEntry.name || t('queue.guest')) : '—';
+  dom.nowServing.textContent = formatNowServing(nowEntry, 0);
+  dom.nextUp.textContent = formatNowServing(nextEntry, 1);
   dom.projectedFinish.textContent = totalWait ? formatEtaTime(totalWait) : '—';
 
   dom.queueTableBody.innerHTML = '';
@@ -473,7 +503,7 @@ function renderDashboard() {
 
     const row = document.createElement('tr');
 
-    row.appendChild(createCell(String(index + 1)));
+    row.appendChild(createCell(getEntryTicket(entry, index) || String(index + 1)));
     row.appendChild(createCell(entry.name || t('queue.guest')));
     row.appendChild(createCell(entry.phone || '—'));
 
@@ -629,12 +659,20 @@ async function handleCheckinSubmit(event) {
   await refreshData();
 
   dom.checkinForm.reset();
-  showCheckinStatus(entry.id);
+  showCheckinStatus(entry.id, entry.ticketNumber);
 }
 
-function showCheckinStatus(entryId) {
+function showCheckinStatus(entryId, ticketNumber) {
   if (!dom.checkinStatus) return;
   dom.checkinStatus.dataset.entryId = entryId;
+  if (ticketNumber) {
+    dom.checkinStatus.dataset.ticketNumber = String(ticketNumber);
+  } else {
+    const entry = queue.find((item) => item.id === entryId);
+    if (entry && entry.ticketNumber) {
+      dom.checkinStatus.dataset.ticketNumber = String(entry.ticketNumber);
+    }
+  }
   updateCheckinStatus();
 }
 
@@ -643,6 +681,7 @@ function updateCheckinStatus() {
   const entryId = dom.checkinStatus.dataset.entryId;
   if (!entryId) return;
 
+  const storedTicket = formatTicketNumber(dom.checkinStatus.dataset.ticketNumber);
   const orderedQueue = sortByTime(getActiveQueue());
   const positionIndex = orderedQueue.findIndex((item) => item.id === entryId);
   if (positionIndex === -1) {
@@ -651,11 +690,13 @@ function updateCheckinStatus() {
     return;
   }
 
+  const entry = orderedQueue[positionIndex];
   const position = positionIndex + 1;
   const etaMinutes = calculateEtaForEntry(entryId, orderedQueue);
   const etaText = formatCheckinEtaText(etaMinutes);
+  const ticket = formatTicketNumber(entry.ticketNumber) || storedTicket || formatTicketNumber(position);
 
-  dom.checkinStatus.textContent = t('checkin.status.position', { position, etaText });
+  dom.checkinStatus.textContent = t('checkin.status.position', { position, etaText, ticket });
   dom.checkinStatus.classList.add('active');
 }
 
@@ -737,6 +778,7 @@ function exportToCsv() {
 
   const headers = [
     t('csv.id'),
+    t('csv.ticket'),
     t('csv.name'),
     t('csv.phone'),
     t('csv.status'),
@@ -748,6 +790,7 @@ function exportToCsv() {
 
   const rows = queue.map((entry) => [
     entry.id,
+    entry.ticketNumber ?? '',
     entry.name,
     entry.phone,
     entry.status,
