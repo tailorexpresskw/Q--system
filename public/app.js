@@ -3,7 +3,8 @@
 const API_BASE = '/api';
 const LOCAL_KEYS = {
   staffPin: 'qsys.staffPin',
-  lang: 'qsys.lang'
+  lang: 'qsys.lang',
+  staffUnlocked: 'qsys.staffUnlocked'
 };
 
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -90,6 +91,13 @@ const translations = {
     'help.backToStaff': 'Staff dashboard',
     'footer.left': 'Q System · Realtime queue',
     'footer.right': 'Use ?checkin=1 for the public check-in view.',
+    'lock.title': 'Staff access',
+    'lock.subtitle': 'Enter the password to open the dashboard.',
+    'lock.placeholder': 'Enter password',
+    'lock.unlock': 'Unlock',
+    'lock.status.empty': 'Password is required.',
+    'lock.status.invalid': 'Invalid password. Try again.',
+    'lock.status.checking': 'Checking...',
     'action.notify': 'Notify',
     'action.serve': 'Serve',
     'action.cancel': 'Cancel',
@@ -189,6 +197,13 @@ const translations = {
     'help.backToStaff': 'لوحة الموظفين',
     'footer.left': 'نظام Q · طابور فوري',
     'footer.right': 'استخدم ?checkin=1 لعرض صفحة التسجيل العامة.',
+    'lock.title': 'دخول الموظفين',
+    'lock.subtitle': 'أدخل كلمة المرور لفتح لوحة التحكم.',
+    'lock.placeholder': 'أدخل كلمة المرور',
+    'lock.unlock': 'فتح',
+    'lock.status.empty': 'كلمة المرور مطلوبة.',
+    'lock.status.invalid': 'كلمة المرور غير صحيحة.',
+    'lock.status.checking': 'جار التحقق...',
     'action.notify': 'إشعار',
     'action.serve': 'خدمة',
     'action.cancel': 'إلغاء',
@@ -224,6 +239,10 @@ const dom = {
   queueTableBody: document.querySelector('#queueTable tbody'),
   checkinLink: document.getElementById('checkinLink'),
   qrImage: document.getElementById('qrImage'),
+  staffLock: document.getElementById('staffLock'),
+  staffLockInput: document.getElementById('staffLockInput'),
+  staffLockButton: document.getElementById('staffLockButton'),
+  staffLockStatus: document.getElementById('staffLockStatus'),
   checkinForm: document.getElementById('checkinForm'),
   checkinName: document.getElementById('checkinName'),
   checkinPhone: document.getElementById('checkinPhone'),
@@ -253,6 +272,7 @@ init();
 async function init() {
   bindEvents();
   applyLanguage(getInitialLang());
+  setupStaffLock();
   loadStaffPin();
   setShareableLink();
   await refreshData();
@@ -272,8 +292,7 @@ function getInitialLang() {
   const params = new URLSearchParams(window.location.search);
   const queryLang = normalizeLang(params.get('lang'));
   const storedLang = normalizeLang(localStorage.getItem(LOCAL_KEYS.lang));
-  const browserLang = normalizeLang(navigator.language || '');
-  return queryLang || storedLang || browserLang || 'en';
+  return queryLang || storedLang || 'ar';
 }
 
 function applyLanguage(lang) {
@@ -293,6 +312,7 @@ function applyLanguage(lang) {
   renderAll();
   updateCheckinStatus();
   updatePinStatus();
+  updateStaffLockStatus();
 }
 
 function translateStatic() {
@@ -344,6 +364,81 @@ function getStatusLabel(status) {
   return label.startsWith('status.') ? status : label;
 }
 
+function isStaffUnlocked() {
+  return localStorage.getItem(LOCAL_KEYS.staffUnlocked) === '1';
+}
+
+function setStaffUnlocked(value) {
+  if (value) {
+    localStorage.setItem(LOCAL_KEYS.staffUnlocked, '1');
+  } else {
+    localStorage.removeItem(LOCAL_KEYS.staffUnlocked);
+  }
+}
+
+function setupStaffLock() {
+  if (!dom.staffLock) return;
+  if (isCheckinView) {
+    hideStaffLock();
+    return;
+  }
+  if (isStaffUnlocked()) {
+    hideStaffLock();
+    return;
+  }
+  showStaffLock();
+}
+
+function showStaffLock() {
+  if (!dom.staffLock) return;
+  dom.staffLock.classList.add('active');
+  document.body.classList.add('locked');
+  if (dom.staffLockInput) {
+    dom.staffLockInput.focus();
+  }
+}
+
+function hideStaffLock() {
+  if (!dom.staffLock) return;
+  dom.staffLock.classList.remove('active');
+  document.body.classList.remove('locked');
+}
+
+function updateStaffLockStatus(key) {
+  if (!dom.staffLockStatus) return;
+  const nextKey = key || dom.staffLockStatus.dataset.statusKey;
+  if (!nextKey) {
+    dom.staffLockStatus.textContent = '';
+    dom.staffLockStatus.dataset.statusKey = '';
+    return;
+  }
+  dom.staffLockStatus.dataset.statusKey = nextKey;
+  dom.staffLockStatus.textContent = t(nextKey);
+}
+
+async function handleStaffUnlock() {
+  if (!dom.staffLockInput) return;
+  const pin = dom.staffLockInput.value.trim();
+  if (!pin) {
+    updateStaffLockStatus('lock.status.empty');
+    return;
+  }
+
+  updateStaffLockStatus('lock.status.checking');
+
+  try {
+    await verifyStaffPin(pin);
+    setStaffPin(pin);
+    setStaffUnlocked(true);
+    dom.staffLockInput.value = '';
+    updateStaffLockStatus('');
+    hideStaffLock();
+    updatePinStatus('pin.status.saved');
+  } catch (error) {
+    updateStaffLockStatus('lock.status.invalid');
+  }
+}
+
 function formatTicketNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return '';
@@ -365,6 +460,19 @@ function formatNowServing(entry, fallbackIndex) {
 }
 
 function bindEvents() {
+  if (dom.staffLockButton) {
+    dom.staffLockButton.addEventListener('click', handleStaffUnlock);
+  }
+
+  if (dom.staffLockInput) {
+    dom.staffLockInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleStaffUnlock();
+      }
+    });
+  }
+
   if (dom.checkinForm) {
     dom.checkinForm.addEventListener('submit', handleCheckinSubmit);
   }
@@ -886,6 +994,21 @@ async function updateQueueStatus(entryId, status) {
   });
 }
 
+async function verifyStaffPin(pin) {
+  const response = await fetch(`${API_BASE}/auth`, {
+    method: 'POST',
+    headers: {
+      'x-qsys-pin': pin
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Invalid PIN');
+  }
+
+  return response.json();
+}
+
 async function apiFetch(path, options = {}) {
   const { requiresPin, ...fetchOptions } = options;
   const headers = new Headers(fetchOptions.headers || {});
@@ -965,7 +1088,10 @@ function updatePinStatus(key) {
 
 function handleUnauthorized() {
   clearStaffPin();
+  setStaffUnlocked(false);
   updatePinStatus('pin.status.invalid');
+  updateStaffLockStatus('lock.status.invalid');
+  showStaffLock();
 }
 
 function connectSocket() {

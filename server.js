@@ -136,6 +136,10 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/auth', requirePin, (req, res) => {
+  res.json({ ok: true });
+});
+
 app.get('/api/services', async (req, res, next) => {
   try {
     const result = await pool.query('SELECT id, name, avg_minutes FROM services ORDER BY name');
