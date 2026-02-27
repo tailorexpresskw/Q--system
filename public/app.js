@@ -12,6 +12,10 @@ const LOCAL_KEYS = {
   ticketBranchId: 'qsys.ticketBranchId'
 };
 
+const WAIT_MULTIPLIER_MIN = 0.5;
+const WAIT_MULTIPLIER_MAX = 2.5;
+const WAIT_MULTIPLIER_STEP = 0.1;
+
 const SUPPORTED_LANGS = ['en', 'ar'];
 const LANG_META = {
   en: { locale: 'en-US', dir: 'ltr' },
@@ -94,6 +98,7 @@ const translations = {
     'checkin.submit': 'Check in',
     'checkin.status.generic': 'Checked in successfully. Your spot will update shortly.',
     'checkin.status.position': 'Checked in. Your number: {ticket}. Position {position}. ETA: {etaText}.',
+    'checkin.status.positionNoEta': 'Checked in. Your number: {ticket}. Position {position}.',
     'checkin.eta.now': 'Now',
     'checkin.eta.approx': '~{minutes} min (around {time})',
     'checkin.serviceOption': '{name} ({minutes} min)',
@@ -109,6 +114,17 @@ const translations = {
     'display.nowServing': 'Now serving',
     'display.nextUp': 'Next',
     'display.note': 'Please wait until your number appears.',
+    'display.title': 'Display screen',
+    'display.subtitle': 'Open the live number board for your waiting area.',
+    'display.copy': 'Copy display link',
+    'display.open': 'Open display',
+    'wait.title': 'Wait time controls',
+    'wait.subtitle': 'Adjust or hide the ETA shown to guests.',
+    'wait.show': 'Show wait time to guests',
+    'wait.multiplierLabel': 'Wait time multiplier',
+    'wait.multiplierHint': '1.0 = normal. 0.8 = shorter. 1.3 = longer.',
+    'wait.saved': 'Wait time settings saved.',
+    'wait.error': 'Unable to save wait settings.',
     'footer.left': 'Q System · Realtime queue',
     'footer.right': 'Use ?checkin=1 for the public check-in view.',
     'lock.title': 'Staff access',
@@ -215,6 +231,7 @@ const translations = {
     'checkin.submit': 'تسجيل',
     'checkin.status.generic': 'تم التسجيل بنجاح. سيتم تحديث دورك قريبًا.',
     'checkin.status.position': 'تم التسجيل. رقمك: {ticket}. الترتيب {position}. الوقت المتوقع: {etaText}.',
+    'checkin.status.positionNoEta': 'تم التسجيل. رقمك: {ticket}. الترتيب {position}.',
     'checkin.eta.now': 'الآن',
     'checkin.eta.approx': '~{minutes} دقيقة (حوالي {time})',
     'checkin.serviceOption': '{name} ({minutes} دقيقة)',
@@ -230,6 +247,17 @@ const translations = {
     'display.nowServing': 'يُخدم الآن',
     'display.nextUp': 'التالي',
     'display.note': 'يرجى الانتظار حتى يظهر رقمك.',
+    'display.title': 'شاشة العرض',
+    'display.subtitle': 'افتح لوحة الأرقام المباشرة لمنطقة الانتظار.',
+    'display.copy': 'نسخ رابط العرض',
+    'display.open': 'فتح العرض',
+    'wait.title': 'التحكم بوقت الانتظار',
+    'wait.subtitle': 'اضبط أو أخفِ الوقت المتوقع المعروض للضيوف.',
+    'wait.show': 'إظهار وقت الانتظار للضيوف',
+    'wait.multiplierLabel': 'مضاعف وقت الانتظار',
+    'wait.multiplierHint': '1.0 = طبيعي. 0.8 = أقل. 1.3 = أطول.',
+    'wait.saved': 'تم حفظ إعدادات وقت الانتظار.',
+    'wait.error': 'تعذر حفظ إعدادات وقت الانتظار.',
     'footer.left': 'نظام Q · طابور فوري',
     'footer.right': 'استخدم ?checkin=1 لعرض صفحة التسجيل العامة.',
     'lock.title': 'دخول الموظفين',
@@ -273,7 +301,15 @@ const dom = {
   projectedFinish: document.getElementById('projectedFinish'),
   queueTableBody: document.querySelector('#queueTable tbody'),
   checkinLink: document.getElementById('checkinLink'),
+  displayLink: document.getElementById('displayLink'),
   qrImage: document.getElementById('qrImage'),
+  copyDisplay: document.getElementById('copyDisplay'),
+  openDisplay: document.getElementById('openDisplay'),
+  displayNowStaff: document.getElementById('displayNowStaff'),
+  displayNextStaff: document.getElementById('displayNextStaff'),
+  waitVisibilityToggle: document.getElementById('waitVisibilityToggle'),
+  waitMultiplierInput: document.getElementById('waitMultiplierInput'),
+  waitStatus: document.getElementById('waitStatus'),
   staffLock: document.getElementById('staffLock'),
   staffLockInput: document.getElementById('staffLockInput'),
   staffLockButton: document.getElementById('staffLockButton'),
@@ -292,6 +328,7 @@ const dom = {
   checkinStatus: document.getElementById('checkinStatus'),
   copyCheckin: document.getElementById('copyCheckin'),
   copyCheckinHeader: document.getElementById('copyCheckinHeader'),
+  openCheckinHeader: document.getElementById('openCheckinHeader'),
   languageSelect: document.getElementById('languageSelect'),
   refreshQueue: document.getElementById('refreshQueue'),
   exportCsv: document.getElementById('exportCsv'),
@@ -304,6 +341,7 @@ let services = [];
 let queue = [];
 let socket = null;
 let refreshTimer = null;
+let waitSettingsSaveTimer = null;
 let currentLang = 'en';
 let currentLocale = LANG_META.en.locale;
 let branches = [];
@@ -368,6 +406,7 @@ function applyLanguage(lang) {
   renderAll();
   updateCheckinStatus();
   updatePinStatus();
+  updateWaitStatus();
   updateStaffLockStatus();
 
   if (currentBranch) {
@@ -419,6 +458,38 @@ function formatEtaLabel(minutes) {
 function formatCheckinEtaText(minutes) {
   if (!minutes) return t('checkin.eta.now');
   return t('checkin.eta.approx', { minutes: formatNumber(minutes), time: formatEtaTime(minutes) });
+}
+
+function getWaitSettings() {
+  const waitVisibility = currentBranch ? currentBranch.waitVisibility !== false : true;
+  const rawMultiplier = currentBranch ? Number(currentBranch.waitMultiplier) : 1;
+  const waitMultiplier = Number.isFinite(rawMultiplier) && rawMultiplier > 0 ? rawMultiplier : 1;
+  return { visible: waitVisibility, multiplier: waitMultiplier };
+}
+
+function clampWaitMultiplier(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 1;
+  const clamped = Math.min(WAIT_MULTIPLIER_MAX, Math.max(WAIT_MULTIPLIER_MIN, numeric));
+  const normalized = Math.round(clamped / WAIT_MULTIPLIER_STEP) * WAIT_MULTIPLIER_STEP;
+  return Number(normalized.toFixed(1));
+}
+
+function applyWaitMultiplier(minutes) {
+  const { multiplier } = getWaitSettings();
+  const scaled = Math.max(0, Math.round(Number(minutes) * multiplier));
+  return Number.isFinite(scaled) ? scaled : 0;
+}
+
+function applyWaitSettingsToUI() {
+  if (!dom.waitVisibilityToggle && !dom.waitMultiplierInput) return;
+  const settings = getWaitSettings();
+  if (dom.waitVisibilityToggle) {
+    dom.waitVisibilityToggle.checked = settings.visible;
+  }
+  if (dom.waitMultiplierInput) {
+    dom.waitMultiplierInput.value = settings.multiplier.toFixed(1);
+  }
 }
 
 function getStatusLabel(status) {
@@ -528,6 +599,9 @@ function setCurrentBranchById(id) {
   }
   updateBranchMeta('branches.code', { code: currentBranch.code });
   setShareableLink();
+  applyWaitSettingsToUI();
+  updateWaitStatus('');
+  updateCheckinStatus();
   refreshData();
 }
 
@@ -567,6 +641,47 @@ async function loadBranches() {
 
   if (currentBranch) {
     updateBranchMeta('branches.code', { code: currentBranch.code });
+  }
+
+  setShareableLink();
+  applyWaitSettingsToUI();
+  updateWaitStatus('');
+  updateCheckinStatus();
+}
+
+function updateBranchInState(updated) {
+  if (!updated) return;
+  branches = branches.map((branch) => (branch.id === updated.id ? { ...branch, ...updated } : branch));
+  if (currentBranch && currentBranch.id === updated.id) {
+    currentBranch = { ...currentBranch, ...updated };
+  }
+}
+
+function handleWaitSettingsChange() {
+  if (waitSettingsSaveTimer) {
+    clearTimeout(waitSettingsSaveTimer);
+  }
+  waitSettingsSaveTimer = setTimeout(() => {
+    saveWaitSettings();
+  }, 200);
+}
+
+async function saveWaitSettings() {
+  if (!currentBranch) return;
+  const waitVisibility = dom.waitVisibilityToggle ? dom.waitVisibilityToggle.checked : true;
+  const waitMultiplier = clampWaitMultiplier(dom.waitMultiplierInput ? dom.waitMultiplierInput.value : 1);
+  if (dom.waitMultiplierInput) {
+    dom.waitMultiplierInput.value = waitMultiplier.toFixed(1);
+  }
+
+  try {
+    const updated = await updateBranchSettings(currentBranch.id, { waitVisibility, waitMultiplier });
+    updateBranchInState(updated);
+    updateWaitStatus('wait.saved');
+    updateCheckinStatus();
+  } catch (error) {
+    console.warn('Failed to update wait settings.', error);
+    updateWaitStatus('wait.error');
   }
 }
 
@@ -675,6 +790,10 @@ function bindEvents() {
     dom.copyCheckinHeader.addEventListener('click', () => copyCheckinLink(dom.copyCheckinHeader));
   }
 
+  if (dom.copyDisplay) {
+    dom.copyDisplay.addEventListener('click', () => copyDisplayLink(dom.copyDisplay));
+  }
+
   if (dom.languageSelect) {
     dom.languageSelect.addEventListener('change', (event) => {
       applyLanguage(event.target.value);
@@ -691,6 +810,14 @@ function bindEvents() {
 
   if (dom.addService) {
     dom.addService.addEventListener('click', addServiceRow);
+  }
+
+  if (dom.waitVisibilityToggle) {
+    dom.waitVisibilityToggle.addEventListener('change', handleWaitSettingsChange);
+  }
+
+  if (dom.waitMultiplierInput) {
+    dom.waitMultiplierInput.addEventListener('change', handleWaitSettingsChange);
   }
 
   if (dom.saveStaffPin) {
@@ -722,8 +849,12 @@ function startPolling() {
   }, 20000);
 }
 
-async function refreshData() {
+async function refreshData(options = {}) {
+  const { refreshBranches = false } = options;
   try {
+    if (refreshBranches) {
+      await loadBranches();
+    }
     const [servicesData, queueData] = await Promise.all([fetchServices(), fetchQueue()]);
     services = servicesData;
     queue = queueData;
@@ -781,6 +912,12 @@ function renderDashboard() {
   dom.nowServing.textContent = formatNowServing(nowEntry, 0);
   dom.nextUp.textContent = formatNowServing(nextEntry, 1);
   dom.projectedFinish.textContent = totalWait ? formatEtaTime(totalWait) : '—';
+  if (dom.displayNowStaff) {
+    dom.displayNowStaff.textContent = getEntryTicket(nowEntry, 0) || '—';
+  }
+  if (dom.displayNextStaff) {
+    dom.displayNextStaff.textContent = getEntryTicket(nextEntry, 1) || '—';
+  }
 
   dom.queueTableBody.innerHTML = '';
 
@@ -1024,11 +1161,14 @@ function updateCheckinStatus() {
 
   const entry = orderedQueue[positionIndex];
   const position = positionIndex + 1;
+  const waitSettings = getWaitSettings();
   const etaMinutes = calculateEtaForEntry(entryId, orderedQueue);
-  const etaText = formatCheckinEtaText(etaMinutes);
+  const adjustedEtaMinutes = waitSettings.visible ? applyWaitMultiplier(etaMinutes) : 0;
+  const etaText = waitSettings.visible ? formatCheckinEtaText(adjustedEtaMinutes) : '';
   const ticket = formatTicketNumber(entry.ticketNumber) || storedTicket || formatTicketNumber(position);
 
-  dom.checkinStatus.textContent = t('checkin.status.position', { position, etaText, ticket });
+  const statusKey = waitSettings.visible ? 'checkin.status.position' : 'checkin.status.positionNoEta';
+  dom.checkinStatus.textContent = t(statusKey, { position, etaText, ticket });
   dom.checkinStatus.classList.add('active');
   showTicketDisplay(ticket);
 }
@@ -1114,15 +1254,30 @@ function calculateEtaForEntry(entryId, orderedQueue) {
 function setShareableLink() {
   const baseUrl = `${window.location.origin}${window.location.pathname}`;
   const branchCode = currentBranch ? currentBranch.code : '';
-  const params = new URLSearchParams();
-  params.set('checkin', '1');
+  const checkinParams = new URLSearchParams();
+  checkinParams.set('checkin', '1');
   if (branchCode) {
-    params.set('branch', branchCode);
+    checkinParams.set('branch', branchCode);
   }
-  const checkinUrl = `${baseUrl}?${params.toString()}`;
+  const checkinUrl = `${baseUrl}?${checkinParams.toString()}`;
+  const displayParams = new URLSearchParams();
+  displayParams.set('display', '1');
+  if (branchCode) {
+    displayParams.set('branch', branchCode);
+  }
+  const displayUrl = `${baseUrl}?${displayParams.toString()}`;
 
   if (dom.checkinLink) {
     dom.checkinLink.value = checkinUrl;
+  }
+  if (dom.displayLink) {
+    dom.displayLink.value = displayUrl;
+  }
+  if (dom.openDisplay) {
+    dom.openDisplay.href = displayUrl;
+  }
+  if (dom.openCheckinHeader) {
+    dom.openCheckinHeader.href = checkinUrl;
   }
 
   if (dom.qrImage) {
@@ -1130,15 +1285,15 @@ function setShareableLink() {
   }
 }
 
-async function copyCheckinLink(button) {
-  const link = dom.checkinLink ? dom.checkinLink.value : '';
+async function copyLink(button, input) {
+  const link = input ? input.value : '';
   if (!link) return;
 
   try {
     if (navigator.clipboard && window.location.protocol !== 'file:') {
       await navigator.clipboard.writeText(link);
     } else {
-      dom.checkinLink.select();
+      input.select();
       document.execCommand('copy');
     }
     flashButton(button, t('copy.copied'));
@@ -1146,6 +1301,14 @@ async function copyCheckinLink(button) {
     console.warn('Copy failed.', error);
     flashButton(button, t('copy.failed'));
   }
+}
+
+async function copyCheckinLink(button) {
+  return copyLink(button, dom.checkinLink);
+}
+
+async function copyDisplayLink(button) {
+  return copyLink(button, dom.displayLink);
 }
 
 function flashButton(button, label) {
@@ -1257,6 +1420,14 @@ async function createBranch(name, adminPin) {
   }
 
   return response.json();
+}
+
+async function updateBranchSettings(branchId, payload) {
+  return apiFetch(`/branches/${branchId}/settings`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    requiresPin: true
+  });
 }
 
 async function createService(payload) {
@@ -1382,6 +1553,23 @@ function updatePinStatus(key) {
   dom.staffPinStatus.textContent = t(nextKey);
 }
 
+function updateWaitStatus(key) {
+  if (!dom.waitStatus) return;
+  if (key === '') {
+    dom.waitStatus.textContent = '';
+    dom.waitStatus.dataset.statusKey = '';
+    return;
+  }
+  const nextKey = key || dom.waitStatus.dataset.statusKey;
+  if (!nextKey) {
+    dom.waitStatus.textContent = '';
+    dom.waitStatus.dataset.statusKey = '';
+    return;
+  }
+  dom.waitStatus.dataset.statusKey = nextKey;
+  dom.waitStatus.textContent = t(nextKey);
+}
+
 function handleUnauthorized() {
   clearStaffPin();
   setStaffUnlocked(false);
@@ -1402,7 +1590,7 @@ function connectSocket() {
     try {
       const payload = JSON.parse(event.data);
       if (payload.type === 'data.updated') {
-        refreshData();
+        refreshData({ refreshBranches: true });
       }
     } catch (error) {
       console.warn('Failed to parse socket message.', error);

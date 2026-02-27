@@ -416,6 +416,55 @@ label {
   gap: 10px;
 }
 
+.display-box,
+.wait-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(51, 32, 42, 0.05);
+  display: grid;
+  gap: 10px;
+}
+
+.display-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  background: rgba(96, 32, 46, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.display-preview .label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.display-preview .value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.wait-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.wait-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  font-weight: 600;
+}
+
+.wait-toggle input {
+  width: auto;
+}
+
 .branch-row {
   display: flex;
   gap: 10px;
@@ -659,6 +708,10 @@ label {
   .display-board {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .display-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 600px) {
@@ -701,6 +754,7 @@ html[dir="rtl"] .panel-actions,
 html[dir="rtl"] .row-actions,
 html[dir="rtl"] .share-link,
 html[dir="rtl"] .pin-row,
+html[dir="rtl"] .wait-toggle,
 html[dir="rtl"] .checkin-actions,
 html[dir="rtl"] .branch-row {
   flex-direction: row-reverse;

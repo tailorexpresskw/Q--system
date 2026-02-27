@@ -126,6 +126,43 @@
           <div class="note">
             <span data-i18n="share.dataNote">Data is synced via the backend database.</span>
           </div>
+          <div class="display-box">
+            <h3 data-i18n="display.title">Display screen</h3>
+            <p class="muted small" data-i18n="display.subtitle">Open the live number board for your waiting area.</p>
+            <div class="share-link">
+              <input id="displayLink" type="text" readonly />
+              <button class="btn ghost" id="copyDisplay" data-i18n="display.copy">Copy display link</button>
+              <a class="btn primary" id="openDisplay" href="?display=1" data-i18n="display.open">Open display</a>
+            </div>
+            <div class="display-preview">
+              <div>
+                <span class="label" data-i18n="display.nowServing">Now serving</span>
+                <span class="value" id="displayNowStaff">—</span>
+              </div>
+              <div>
+                <span class="label" data-i18n="display.nextUp">Next</span>
+                <span class="value" id="displayNextStaff">—</span>
+              </div>
+            </div>
+          </div>
+          <div class="wait-box">
+            <h3 data-i18n="wait.title">Wait time controls</h3>
+            <p class="muted small" data-i18n="wait.subtitle">Adjust or hide the ETA shown to guests.</p>
+            <div class="wait-controls">
+              <label class="wait-toggle">
+                <input id="waitVisibilityToggle" type="checkbox" />
+                <span data-i18n="wait.show">Show wait time to guests</span>
+              </label>
+              <label>
+                <span data-i18n="wait.multiplierLabel">Wait time multiplier</span>
+                <input id="waitMultiplierInput" type="number" min="0.5" max="2.5" step="0.1" />
+              </label>
+              <p class="muted small" id="waitMultiplierHint" data-i18n="wait.multiplierHint">
+                1.0 = normal. 0.8 = shorter. 1.3 = longer.
+              </p>
+              <div class="muted small" id="waitStatus"></div>
+            </div>
+          </div>
           <div class="branch-box">
             <h3 data-i18n="branches.title">Branches</h3>
             <p class="muted small" data-i18n="branches.subtitle">Select a branch to view its queue or create a new one.</p>

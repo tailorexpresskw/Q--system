@@ -90,6 +90,17 @@ function mapQueue(row) {
   };
 }
 
+function mapBranch(row) {
+  const waitMultiplier = Number(row.wait_multiplier);
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    waitVisibility: row.wait_visibility !== false,
+    waitMultiplier: Number.isFinite(waitMultiplier) ? waitMultiplier : 1
+  };
+}
+
 function generateBranchCode() {
   return crypto.randomBytes(3).toString('hex');
 }
@@ -135,6 +146,9 @@ async function initDatabase() {
       name text NOT NULL,
       code text NOT NULL UNIQUE,
       next_ticket integer NOT NULL DEFAULT 0,
+      last_reset_date date NOT NULL DEFAULT CURRENT_DATE,
+      wait_visibility boolean NOT NULL DEFAULT true,
+      wait_multiplier numeric NOT NULL DEFAULT 1,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
@@ -168,10 +182,17 @@ async function initDatabase() {
   await pool.query('ALTER TABLE queue ALTER COLUMN phone DROP NOT NULL;');
   await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS ticket_number integer;`);
   await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS branch_id uuid REFERENCES branches(id);`);
+  await pool.query('ALTER TABLE branches ADD COLUMN IF NOT EXISTS last_reset_date date;');
+  await pool.query('ALTER TABLE branches ALTER COLUMN last_reset_date SET DEFAULT CURRENT_DATE;');
+  await pool.query('ALTER TABLE branches ADD COLUMN IF NOT EXISTS wait_visibility boolean NOT NULL DEFAULT true;');
+  await pool.query('ALTER TABLE branches ADD COLUMN IF NOT EXISTS wait_multiplier numeric NOT NULL DEFAULT 1;');
   await pool.query('CREATE SEQUENCE IF NOT EXISTS queue_ticket_seq;');
   await pool.query('CREATE INDEX IF NOT EXISTS queue_branch_created_idx ON queue (branch_id, created_at);');
 
   await pool.query('CREATE INDEX IF NOT EXISTS queue_created_at_idx ON queue (created_at);');
+  await pool.query('UPDATE branches SET last_reset_date = COALESCE(last_reset_date, CURRENT_DATE);');
+  await pool.query('UPDATE branches SET wait_visibility = COALESCE(wait_visibility, true);');
+  await pool.query('UPDATE branches SET wait_multiplier = COALESCE(wait_multiplier, 1);');
 
   const result = await pool.query('SELECT COUNT(*) FROM services');
   const count = Number(result.rows[0]?.count || 0);
@@ -213,8 +234,10 @@ app.post('/api/auth', requirePin, (req, res) => {
 
 app.get('/api/branches', async (req, res, next) => {
   try {
-    const result = await pool.query('SELECT id, name, code FROM branches ORDER BY created_at');
-    res.json(result.rows);
+    const result = await pool.query(
+      'SELECT id, name, code, wait_visibility, wait_multiplier FROM branches ORDER BY created_at'
+    );
+    res.json(result.rows.map(mapBranch));
   } catch (error) {
     next(error);
   }
@@ -249,6 +272,36 @@ app.post('/api/branches', requireAdmin, async (req, res, next) => {
 
     broadcast({ type: 'data.updated' });
     res.status(201).json({ id, name, code });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/branches/:id/settings', requirePin, async (req, res, next) => {
+  try {
+    const waitVisibility = req.body.waitVisibility;
+    const waitMultiplier = Number(req.body.waitMultiplier);
+
+    if (typeof waitVisibility !== 'boolean' || !Number.isFinite(waitMultiplier) || waitMultiplier <= 0) {
+      return res.status(400).json({ error: 'Invalid branch settings.' });
+    }
+
+    const normalizedMultiplier = Math.max(0.5, Math.min(2.5, waitMultiplier));
+    const result = await pool.query(
+      `UPDATE branches
+       SET wait_visibility = $1,
+           wait_multiplier = $2
+       WHERE id = $3
+       RETURNING id, name, code, wait_visibility, wait_multiplier`,
+      [waitVisibility, normalizedMultiplier, req.params.id]
+    );
+
+    if (!result.rowCount) {
+      return res.status(404).json({ error: 'Branch not found.' });
+    }
+
+    broadcast({ type: 'data.updated' });
+    res.json(mapBranch(result.rows[0]));
   } catch (error) {
     next(error);
   }
@@ -400,7 +453,14 @@ app.post('/api/checkin', async (req, res, next) => {
     try {
       await client.query('BEGIN');
       const counterResult = await client.query(
-        'UPDATE branches SET next_ticket = next_ticket + 1 WHERE id = $1 RETURNING next_ticket',
+        `UPDATE branches
+         SET next_ticket = CASE
+             WHEN last_reset_date IS DISTINCT FROM CURRENT_DATE THEN 1
+             ELSE next_ticket + 1
+           END,
+           last_reset_date = CURRENT_DATE
+         WHERE id = $1
+         RETURNING next_ticket`,
         [branch.id]
       );
       const ticketNumber = Number(counterResult.rows[0]?.next_ticket || 0);
