@@ -52,7 +52,7 @@
           <span class="label" data-i18n="metrics.totalWait">Estimated total wait</span>
           <span class="value" id="metricTotalWait">0 min</span>
         </div>
-        <div class="metric">
+        <div class="metric" id="metricAvgServiceCard">
           <span class="label" data-i18n="metrics.avgService">Average service time</span>
           <span class="value" id="metricAvgService">0 min</span>
         </div>
@@ -152,6 +152,10 @@
               <label class="wait-toggle">
                 <input id="waitVisibilityToggle" type="checkbox" />
                 <span data-i18n="wait.show">Show wait time to guests</span>
+              </label>
+              <label class="wait-toggle">
+                <input id="avgServiceToggle" type="checkbox" />
+                <span data-i18n="metrics.avgServiceToggle">Show average service time metric</span>
               </label>
               <label>
                 <span data-i18n="wait.multiplierLabel">Wait time multiplier</span>

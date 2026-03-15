@@ -9,7 +9,8 @@ const LOCAL_KEYS = {
   branchId: 'qsys.branchId',
   ticketEntryId: 'qsys.ticketEntryId',
   ticketNumber: 'qsys.ticketNumber',
-  ticketBranchId: 'qsys.ticketBranchId'
+  ticketBranchId: 'qsys.ticketBranchId',
+  showAvgService: 'qsys.showAvgService'
 };
 
 const WAIT_MULTIPLIER_MIN = 0.5;
@@ -34,6 +35,7 @@ const translations = {
     'metrics.active': 'Active in queue',
     'metrics.totalWait': 'Estimated total wait',
     'metrics.avgService': 'Average service time',
+    'metrics.avgServiceToggle': 'Show average service time metric',
     'metrics.lastCheckin': 'Last check-in',
     'queue.title': 'Live Queue',
     'queue.subtitle': 'ETAs are driven by service averages and queue order.',
@@ -167,6 +169,7 @@ const translations = {
     'metrics.active': 'النشطون في الطابور',
     'metrics.totalWait': 'إجمالي الانتظار المتوقع',
     'metrics.avgService': 'متوسط وقت الخدمة',
+    'metrics.avgServiceToggle': 'إظهار بطاقة متوسط وقت الخدمة',
     'metrics.lastCheckin': 'آخر تسجيل',
     'queue.title': 'الطابور المباشر',
     'queue.subtitle': 'تُحسب الأوقات المتوقعة بناءً على متوسطات الخدمة وترتيب الطابور.',
@@ -295,6 +298,7 @@ const dom = {
   metricActive: document.getElementById('metricActive'),
   metricTotalWait: document.getElementById('metricTotalWait'),
   metricAvgService: document.getElementById('metricAvgService'),
+  metricAvgServiceCard: document.getElementById('metricAvgServiceCard'),
   metricLastCheckin: document.getElementById('metricLastCheckin'),
   nowServing: document.getElementById('nowServing'),
   nextUp: document.getElementById('nextUp'),
@@ -308,6 +312,7 @@ const dom = {
   displayNowStaff: document.getElementById('displayNowStaff'),
   displayNextStaff: document.getElementById('displayNextStaff'),
   waitVisibilityToggle: document.getElementById('waitVisibilityToggle'),
+  avgServiceToggle: document.getElementById('avgServiceToggle'),
   waitMultiplierInput: document.getElementById('waitMultiplierInput'),
   waitStatus: document.getElementById('waitStatus'),
   staffLock: document.getElementById('staffLock'),
@@ -357,6 +362,7 @@ init();
 async function init() {
   bindEvents();
   applyLanguage(getInitialLang());
+  applyAvgServiceVisibility();
   setupStaffLock();
   await loadBranches();
   loadStaffPin();
@@ -408,6 +414,7 @@ function applyLanguage(lang) {
   updatePinStatus();
   updateWaitStatus();
   updateStaffLockStatus();
+  applyAvgServiceVisibility();
 
   if (currentBranch) {
     updateBranchMeta('branches.code', { code: currentBranch.code });
@@ -489,6 +496,27 @@ function applyWaitSettingsToUI() {
   }
   if (dom.waitMultiplierInput) {
     dom.waitMultiplierInput.value = settings.multiplier.toFixed(1);
+  }
+}
+
+function getAvgServiceVisibility() {
+  return localStorage.getItem(LOCAL_KEYS.showAvgService) === '1';
+}
+
+function setAvgServiceVisibility(value) {
+  if (value) {
+    localStorage.setItem(LOCAL_KEYS.showAvgService, '1');
+  } else {
+    localStorage.removeItem(LOCAL_KEYS.showAvgService);
+  }
+}
+
+function applyAvgServiceVisibility(value = getAvgServiceVisibility()) {
+  if (dom.metricAvgServiceCard) {
+    dom.metricAvgServiceCard.hidden = !value;
+  }
+  if (dom.avgServiceToggle) {
+    dom.avgServiceToggle.checked = value;
   }
 }
 
@@ -814,6 +842,13 @@ function bindEvents() {
 
   if (dom.waitVisibilityToggle) {
     dom.waitVisibilityToggle.addEventListener('change', handleWaitSettingsChange);
+  }
+
+  if (dom.avgServiceToggle) {
+    dom.avgServiceToggle.addEventListener('change', (event) => {
+      setAvgServiceVisibility(event.target.checked);
+      applyAvgServiceVisibility(event.target.checked);
+    });
   }
 
   if (dom.waitMultiplierInput) {
