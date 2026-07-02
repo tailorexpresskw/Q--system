@@ -73,6 +73,10 @@ const translations = {
     'branches.created': 'Created branch {name} ({code}).',
     'branches.error': 'Unable to create branch.',
     'branches.invalidPin': 'Invalid admin password.',
+    'branches.currentLabel': 'Active branch',
+    'branches.publicLabel': 'Check-in branch',
+    'branches.displayLabel': 'Display branch',
+    'branches.none': 'No branch selected',
     'pin.title': 'Staff PIN',
     'pin.subtitle': 'Required for staff actions like notify, serve, cancel, and service edits.',
     'pin.placeholder': 'Enter PIN',
@@ -105,6 +109,10 @@ const translations = {
     'checkin.eta.approx': '~{minutes} min (around {time})',
     'checkin.serviceOption': '{name} ({minutes} min)',
     'checkin.noServices': 'No services available',
+    'checkin.turnLabel': 'Turn alert',
+    'checkin.turnNow': 'It is your turn now. Please go to the counter.',
+    'checkin.turnCalled': 'Staff has called your number {ticket}. Please go to the counter now.',
+    'checkin.turnNowTitle': 'Now serving {ticket}',
     'help.title': 'How it works',
     'help.subtitle': 'Your ETA is calculated from the queue ahead of you and the service time averages.',
     'help.item1': 'Queue position updates in real time.',
@@ -207,6 +215,10 @@ const translations = {
     'branches.created': 'تم إنشاء الفرع {name} ({code}).',
     'branches.error': 'تعذر إنشاء الفرع.',
     'branches.invalidPin': 'كلمة مرور المدير غير صحيحة.',
+    'branches.currentLabel': 'الفرع النشط',
+    'branches.publicLabel': 'فرع التسجيل',
+    'branches.displayLabel': 'فرع شاشة العرض',
+    'branches.none': 'لا يوجد فرع محدد',
     'pin.title': 'رمز الموظفين',
     'pin.subtitle': 'مطلوب لإجراءات الموظفين مثل الإشعار، الخدمة، الإلغاء، وتعديل الخدمات.',
     'pin.placeholder': 'أدخل الرمز',
@@ -239,6 +251,10 @@ const translations = {
     'checkin.eta.approx': '~{minutes} دقيقة (حوالي {time})',
     'checkin.serviceOption': '{name} ({minutes} دقيقة)',
     'checkin.noServices': 'لا توجد خدمات متاحة',
+    'checkin.turnLabel': 'تنبيه الدور',
+    'checkin.turnNow': 'حان دورك الآن. يرجى التوجه إلى الكاونتر.',
+    'checkin.turnCalled': 'تم استدعاء رقمك {ticket}. يرجى التوجه إلى الكاونتر الآن.',
+    'checkin.turnNowTitle': 'يخدم الآن {ticket}',
     'help.title': 'كيف يعمل',
     'help.subtitle': 'يتم حساب وقتك المتوقع بناءً على من قبلك في الطابور ومتوسطات وقت الخدمة.',
     'help.item1': 'يتم تحديث ترتيبك في الوقت الحقيقي.',
@@ -322,15 +338,24 @@ const dom = {
   branchSelect: document.getElementById('branchSelect'),
   createBranch: document.getElementById('createBranch'),
   branchMeta: document.getElementById('branchMeta'),
+  activeBranchName: document.getElementById('activeBranchName'),
+  activeBranchCode: document.getElementById('activeBranchCode'),
   quickCheckin: document.getElementById('quickCheckin'),
   ticketDisplay: document.getElementById('ticketDisplay'),
   ticketNumberDisplay: document.getElementById('ticketNumberDisplay'),
+  turnAlert: document.getElementById('turnAlert'),
+  turnAlertTicket: document.getElementById('turnAlertTicket'),
+  turnAlertMessage: document.getElementById('turnAlertMessage'),
   displayNow: document.getElementById('displayNow'),
   displayNext: document.getElementById('displayNext'),
+  displayBranchName: document.getElementById('displayBranchName'),
+  displayBranchCode: document.getElementById('displayBranchCode'),
   checkinForm: document.getElementById('checkinForm'),
   checkinName: document.getElementById('checkinName'),
   checkinPhone: document.getElementById('checkinPhone'),
   checkinStatus: document.getElementById('checkinStatus'),
+  checkinBranchName: document.getElementById('checkinBranchName'),
+  checkinBranchCode: document.getElementById('checkinBranchCode'),
   copyCheckin: document.getElementById('copyCheckin'),
   copyCheckinHeader: document.getElementById('copyCheckinHeader'),
   openCheckinHeader: document.getElementById('openCheckinHeader'),
@@ -351,6 +376,9 @@ let currentLang = 'en';
 let currentLocale = LANG_META.en.locale;
 let branches = [];
 let currentBranch = null;
+let turnAlertSignature = '';
+let titleFlashTimer = null;
+let titleFlashResetTimer = null;
 
 const viewParams = new URLSearchParams(window.location.search);
 const isCheckinView = viewParams.get('checkin') === '1';
@@ -415,6 +443,7 @@ function applyLanguage(lang) {
   updateWaitStatus();
   updateStaffLockStatus();
   applyAvgServiceVisibility();
+  renderBranchContext();
 
   if (currentBranch) {
     updateBranchMeta('branches.code', { code: currentBranch.code });
@@ -616,6 +645,22 @@ function updateBranchMeta(messageKey, values = {}) {
   dom.branchMeta.textContent = t(messageKey, values);
 }
 
+function setElementText(element, text = '') {
+  if (!element) return;
+  element.textContent = text;
+}
+
+function renderBranchContext() {
+  const branchName = currentBranch ? currentBranch.name : t('branches.none');
+  const branchCode = currentBranch ? t('branches.code', { code: currentBranch.code }) : '';
+  setElementText(dom.activeBranchName, branchName);
+  setElementText(dom.activeBranchCode, branchCode);
+  setElementText(dom.checkinBranchName, branchName);
+  setElementText(dom.checkinBranchCode, branchCode);
+  setElementText(dom.displayBranchName, branchName);
+  setElementText(dom.displayBranchCode, branchCode);
+}
+
 function setCurrentBranchById(id) {
   if (!id) return;
   const nextBranch = branches.find((branch) => branch.id === id);
@@ -625,6 +670,7 @@ function setCurrentBranchById(id) {
   if (dom.branchSelect) {
     dom.branchSelect.value = currentBranch.id;
   }
+  renderBranchContext();
   updateBranchMeta('branches.code', { code: currentBranch.code });
   setShareableLink();
   applyWaitSettingsToUI();
@@ -667,6 +713,7 @@ async function loadBranches() {
     dom.branchSelect.value = currentBranch ? currentBranch.id : '';
   }
 
+  renderBranchContext();
   if (currentBranch) {
     updateBranchMeta('branches.code', { code: currentBranch.code });
   }
@@ -682,6 +729,7 @@ function updateBranchInState(updated) {
   branches = branches.map((branch) => (branch.id === updated.id ? { ...branch, ...updated } : branch));
   if (currentBranch && currentBranch.id === updated.id) {
     currentBranch = { ...currentBranch, ...updated };
+    renderBranchContext();
   }
 }
 
@@ -1171,7 +1219,10 @@ function showCheckinStatus(entryId, ticketNumber) {
 function updateCheckinStatus() {
   if (!dom.checkinStatus) return;
   const entryId = dom.checkinStatus.dataset.entryId;
-  if (!entryId) return;
+  if (!entryId) {
+    clearTurnAlert();
+    return;
+  }
 
   const storedTicket = formatTicketNumber(dom.checkinStatus.dataset.ticketNumber);
   const orderedQueue = sortByTime(getActiveQueue());
@@ -1181,11 +1232,13 @@ function updateCheckinStatus() {
     if (servedEntry && ['served', 'canceled'].includes(servedEntry.status)) {
       clearSavedTicket();
       hideTicketDisplay();
+      clearTurnAlert();
       dom.checkinStatus.textContent = '';
       dom.checkinStatus.classList.remove('active');
       return;
     }
 
+    clearTurnAlert();
     dom.checkinStatus.textContent = t('checkin.status.generic');
     dom.checkinStatus.classList.add('active');
     if (storedTicket) {
@@ -1206,6 +1259,7 @@ function updateCheckinStatus() {
   dom.checkinStatus.textContent = t(statusKey, { position, etaText, ticket });
   dom.checkinStatus.classList.add('active');
   showTicketDisplay(ticket);
+  updateTurnAlert(entry, positionIndex, ticket);
 }
 
 function showTicketDisplay(ticket) {
@@ -1218,6 +1272,108 @@ function showTicketDisplay(ticket) {
 function hideTicketDisplay() {
   if (!dom.ticketDisplay) return;
   dom.ticketDisplay.classList.remove('active');
+}
+
+function updateTurnAlert(entry, positionIndex, ticket) {
+  if (!entry || !dom.turnAlert || !dom.turnAlertTicket || !dom.turnAlertMessage) {
+    clearTurnAlert();
+    return;
+  }
+
+  const isCustomersTurn = entry.status === 'notified' || positionIndex === 0;
+  if (!isCustomersTurn) {
+    clearTurnAlert();
+    return;
+  }
+
+  dom.turnAlertTicket.textContent = ticket || '—';
+  dom.turnAlertMessage.textContent = entry.status === 'notified'
+    ? t('checkin.turnCalled', { ticket })
+    : t('checkin.turnNow');
+  dom.turnAlert.classList.add('active');
+
+  const signature = `${entry.id}:${entry.status}:${entry.notifiedAt || ''}:${positionIndex}`;
+  if (turnAlertSignature === signature) return;
+
+  turnAlertSignature = signature;
+  dom.turnAlert.classList.remove('pulse');
+  void dom.turnAlert.offsetWidth;
+  dom.turnAlert.classList.add('pulse');
+  flashTurnTitle(ticket);
+  playTurnAlertEffects();
+}
+
+function clearTurnAlert() {
+  turnAlertSignature = '';
+  stopTitleFlash();
+  if (!dom.turnAlert || !dom.turnAlertTicket || !dom.turnAlertMessage) return;
+  dom.turnAlert.classList.remove('active', 'pulse');
+  dom.turnAlertTicket.textContent = '';
+  dom.turnAlertMessage.textContent = t('checkin.turnNow');
+}
+
+function flashTurnTitle(ticket) {
+  stopTitleFlash();
+  const baseTitle = t('app.title');
+  const alertTitle = t('checkin.turnNowTitle', { ticket: ticket || 'Q' });
+  let showingAlert = true;
+  document.title = alertTitle;
+  titleFlashTimer = window.setInterval(() => {
+    document.title = showingAlert ? baseTitle : alertTitle;
+    showingAlert = !showingAlert;
+  }, 900);
+  titleFlashResetTimer = window.setTimeout(() => {
+    stopTitleFlash();
+  }, 7000);
+}
+
+function stopTitleFlash() {
+  if (titleFlashTimer) {
+    window.clearInterval(titleFlashTimer);
+    titleFlashTimer = null;
+  }
+  if (titleFlashResetTimer) {
+    window.clearTimeout(titleFlashResetTimer);
+    titleFlashResetTimer = null;
+  }
+  document.title = t('app.title');
+}
+
+function playTurnAlertEffects() {
+  if (navigator.vibrate) {
+    navigator.vibrate([250, 120, 250, 120, 400]);
+  }
+  playTurnAlertTone();
+}
+
+function playTurnAlertTone() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  try {
+    const context = new AudioContextClass();
+    const notes = [880, 988, 1318];
+    notes.forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const startAt = context.currentTime + (index * 0.18);
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.16);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.18);
+    });
+
+    window.setTimeout(() => {
+      context.close().catch(() => {});
+    }, 900);
+  } catch (error) {
+    console.warn('Turn alert audio unavailable.', error);
+  }
 }
 
 function persistTicket(entry) {
@@ -1235,6 +1391,7 @@ function clearSavedTicket() {
   localStorage.removeItem(LOCAL_KEYS.ticketEntryId);
   localStorage.removeItem(LOCAL_KEYS.ticketNumber);
   localStorage.removeItem(LOCAL_KEYS.ticketBranchId);
+  clearTurnAlert();
   if (dom.checkinStatus) {
     dom.checkinStatus.dataset.entryId = '';
     dom.checkinStatus.dataset.ticketNumber = '';

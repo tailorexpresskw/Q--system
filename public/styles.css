@@ -416,6 +416,42 @@ label {
   gap: 10px;
 }
 
+.branch-current,
+.public-branch,
+.display-branch-banner {
+  padding: 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(96, 32, 46, 0.16), rgba(96, 32, 46, 0.05));
+  border: 1px solid rgba(96, 32, 46, 0.12);
+}
+
+.branch-current .label,
+.public-branch .label,
+.display-branch-banner .label,
+.turn-alert .label {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.branch-current-name,
+.public-branch-name,
+.display-branch-name {
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--accent);
+}
+
+.display-branch-banner {
+  margin-bottom: 20px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
 .display-box,
 .wait-box {
   margin-top: 16px;
@@ -515,6 +551,10 @@ label {
   align-items: stretch;
 }
 
+.display-branch-name {
+  font-size: clamp(28px, 5vw, 46px);
+}
+
 .display-card {
   background: var(--panel);
   border-radius: var(--radius);
@@ -571,6 +611,55 @@ label {
 .ticket-display.active {
   display: grid;
   gap: 8px;
+}
+
+.turn-alert {
+  display: none;
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(96, 32, 46, 0.18), rgba(43, 90, 168, 0.16));
+  border: 1px solid rgba(96, 32, 46, 0.22);
+  text-align: center;
+  box-shadow: 0 18px 40px rgba(96, 32, 46, 0.16);
+}
+
+.turn-alert.active {
+  display: grid;
+  gap: 8px;
+}
+
+.turn-alert-ticket {
+  font-size: clamp(34px, 8vw, 58px);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.turn-alert p {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.turn-alert.pulse {
+  animation: turnPulse 1.2s ease 3;
+}
+
+@keyframes turnPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 18px 40px rgba(96, 32, 46, 0.16);
+  }
+
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 24px 52px rgba(96, 32, 46, 0.24);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 18px 40px rgba(96, 32, 46, 0.16);
+  }
 }
 
 .ticket-display .label {
@@ -769,3 +858,4 @@ html[dir="rtl"] thead th,
 html[dir="rtl"] tbody td {
   text-align: right;
 }
+

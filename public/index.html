@@ -169,6 +169,11 @@
           </div>
           <div class="branch-box">
             <h3 data-i18n="branches.title">Branches</h3>
+            <div class="branch-current">
+              <span class="label" data-i18n="branches.currentLabel">Active branch</span>
+              <div class="branch-current-name" id="activeBranchName">—</div>
+              <div class="branch-current-code muted small" id="activeBranchCode"></div>
+            </div>
             <p class="muted small" data-i18n="branches.subtitle">Select a branch to view its queue or create a new one.</p>
             <div class="branch-row">
               <select id="branchSelect" aria-label="Branch"></select>
@@ -195,6 +200,11 @@
         <div class="checkin-card">
           <div class="checkin-header">
             <span class="chip" data-i18n="checkin.chip">Public check-in</span>
+            <div class="public-branch">
+              <span class="label" data-i18n="branches.publicLabel">Check-in branch</span>
+              <div class="public-branch-name" id="checkinBranchName">—</div>
+              <div class="muted small" id="checkinBranchCode"></div>
+            </div>
             <h2 data-i18n="checkin.title">Join the queue</h2>
             <p class="muted" data-i18n="checkin.subtitle">Enter your details to reserve your spot.</p>
           </div>
@@ -202,6 +212,11 @@
             <span class="label" data-i18n="ticket.label">Your number</span>
             <div class="ticket-number" id="ticketNumberDisplay">Q-0</div>
             <p class="muted small" data-i18n="ticket.note">Keep this number. It will stay on your screen.</p>
+          </div>
+          <div class="turn-alert" id="turnAlert" aria-live="assertive">
+            <span class="label" data-i18n="checkin.turnLabel">Turn alert</span>
+            <div class="turn-alert-ticket" id="turnAlertTicket">Q-0</div>
+            <p id="turnAlertMessage" data-i18n="checkin.turnNow">It is your turn now. Please go to the counter.</p>
           </div>
           <form id="checkinForm">
             <label>
@@ -226,6 +241,11 @@
     </section>
 
     <section id="displayView" class="view display">
+      <div class="display-branch-banner">
+        <span class="label" data-i18n="branches.displayLabel">Display branch</span>
+        <div class="display-branch-name" id="displayBranchName">—</div>
+        <div class="muted small" id="displayBranchCode"></div>
+      </div>
       <div class="display-board">
         <div class="display-card current">
           <span class="label" data-i18n="display.nowServing">Now serving</span>
