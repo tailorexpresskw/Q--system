@@ -126,6 +126,20 @@
           <div class="note">
             <span data-i18n="share.dataNote">Data is synced via the backend database.</span>
           </div>
+          <div class="branch-box">
+            <h3 data-i18n="branches.title">Branches</h3>
+            <div class="branch-current">
+              <span class="label" data-i18n="branches.currentLabel">Active branch</span>
+              <div class="branch-current-name" id="activeBranchName">—</div>
+              <div class="branch-current-code muted small" id="activeBranchCode"></div>
+            </div>
+            <p class="muted small" data-i18n="branches.subtitle">Select a branch to view its queue or create a new one.</p>
+            <div class="branch-row">
+              <select id="branchSelect" aria-label="Branch"></select>
+              <button class="btn ghost" id="createBranch" data-i18n="branches.create">Create</button>
+            </div>
+            <div class="branch-meta muted small" id="branchMeta"></div>
+          </div>
           <div class="display-box">
             <h3 data-i18n="display.title">Display screen</h3>
             <p class="muted small" data-i18n="display.subtitle">Open the live number board for your waiting area.</p>
@@ -166,20 +180,6 @@
               </p>
               <div class="muted small" id="waitStatus"></div>
             </div>
-          </div>
-          <div class="branch-box">
-            <h3 data-i18n="branches.title">Branches</h3>
-            <div class="branch-current">
-              <span class="label" data-i18n="branches.currentLabel">Active branch</span>
-              <div class="branch-current-name" id="activeBranchName">—</div>
-              <div class="branch-current-code muted small" id="activeBranchCode"></div>
-            </div>
-            <p class="muted small" data-i18n="branches.subtitle">Select a branch to view its queue or create a new one.</p>
-            <div class="branch-row">
-              <select id="branchSelect" aria-label="Branch"></select>
-              <button class="btn ghost" id="createBranch" data-i18n="branches.create">Create</button>
-            </div>
-            <div class="branch-meta muted small" id="branchMeta"></div>
           </div>
           <div class="pin-box">
             <h3 data-i18n="pin.title">Staff PIN</h3>
