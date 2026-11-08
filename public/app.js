@@ -10,6 +10,7 @@ const LOCAL_KEYS = {
   ticketEntryId: 'qsys.ticketEntryId',
   ticketNumber: 'qsys.ticketNumber',
   ticketBranchId: 'qsys.ticketBranchId',
+  checkinCooldown: 'qsys.checkinCooldown',
   showAvgService: 'qsys.showAvgService'
 };
 
@@ -94,8 +95,12 @@ const translations = {
     'service.remove': 'Remove',
     'checkin.chip': 'Public check-in',
     'checkin.title': 'Join the queue',
-    'checkin.subtitle': 'Name and phone are optional.',
-    'checkin.nameLabel': 'Full name (optional)',
+    'checkin.subtitle': 'Enter your name to reserve your spot. You can book again after 30 minutes.',
+    'checkin.nameLabel': 'Full name (required)',
+    'checkin.nameRequired': 'Please enter your full name.',
+    'checkin.submitting': 'Submitting...',
+    'checkin.cooldown': 'Your appointment is already booked. You can book again in {minutes} minute(s).',
+    'checkin.failed': 'Unable to submit. Please try again.',
     'checkin.namePlaceholder': 'Alex Johnson',
     'checkin.phoneLabel': 'Phone (optional)',
     'checkin.phonePlaceholder': '(555) 555-0199',
@@ -236,8 +241,12 @@ const translations = {
     'service.remove': 'إزالة',
     'checkin.chip': 'تسجيل عام',
     'checkin.title': 'انضم إلى الطابور',
-    'checkin.subtitle': 'الاسم ورقم الهاتف اختياريان.',
-    'checkin.nameLabel': 'الاسم الكامل (اختياري)',
+    'checkin.subtitle': 'أدخل اسمك لحجز دورك. يمكنك الحجز مرة أخرى بعد 30 دقيقة.',
+    'checkin.nameLabel': 'الاسم الكامل (مطلوب)',
+    'checkin.nameRequired': 'يرجى إدخال اسمك الكامل.',
+    'checkin.submitting': 'جارٍ التسجيل...',
+    'checkin.cooldown': 'تم حجز موعدك بالفعل. يمكنك الحجز مرة أخرى بعد {minutes} دقيقة.',
+    'checkin.failed': 'تعذر التسجيل. يرجى المحاولة مرة أخرى.',
     'checkin.namePlaceholder': 'أحمد محمد',
     'checkin.phoneLabel': 'الهاتف (اختياري)',
     'checkin.phonePlaceholder': '050 000 0000',
@@ -340,7 +349,6 @@ const dom = {
   branchMeta: document.getElementById('branchMeta'),
   activeBranchName: document.getElementById('activeBranchName'),
   activeBranchCode: document.getElementById('activeBranchCode'),
-  quickCheckin: document.getElementById('quickCheckin'),
   ticketDisplay: document.getElementById('ticketDisplay'),
   ticketNumberDisplay: document.getElementById('ticketNumberDisplay'),
   turnAlert: document.getElementById('turnAlert'),
@@ -354,6 +362,7 @@ const dom = {
   checkinName: document.getElementById('checkinName'),
   checkinPhone: document.getElementById('checkinPhone'),
   checkinStatus: document.getElementById('checkinStatus'),
+  checkinFeedback: document.getElementById('checkinFeedback'),
   checkinBranchName: document.getElementById('checkinBranchName'),
   checkinBranchCode: document.getElementById('checkinBranchCode'),
   copyCheckin: document.getElementById('copyCheckin'),
@@ -379,6 +388,9 @@ let currentBranch = null;
 let turnAlertSignature = '';
 let titleFlashTimer = null;
 let titleFlashResetTimer = null;
+let checkinSubmitting = false;
+let checkinErrorKey = '';
+let checkinCooldown = null;
 
 const viewParams = new URLSearchParams(window.location.search);
 const isCheckinView = viewParams.get('checkin') === '1';
@@ -398,6 +410,8 @@ async function init() {
   await refreshData();
   if (isCheckinView) {
     loadSavedTicket();
+    updateCheckinControls();
+    setInterval(updateCheckinControls, 1000);
   }
   connectSocket();
   startPolling();
@@ -439,6 +453,7 @@ function applyLanguage(lang) {
   translateStatic();
   renderAll();
   updateCheckinStatus();
+  updateCheckinControls();
   updatePinStatus();
   updateWaitStatus();
   updateStaffLockStatus();
@@ -676,6 +691,7 @@ function setCurrentBranchById(id) {
   applyWaitSettingsToUI();
   updateWaitStatus('');
   updateCheckinStatus();
+  updateCheckinControls();
   refreshData();
 }
 
@@ -854,9 +870,14 @@ function bindEvents() {
     dom.checkinForm.addEventListener('submit', handleCheckinSubmit);
   }
 
-  if (dom.quickCheckin) {
-    dom.quickCheckin.addEventListener('click', handleQuickCheckin);
-  }
+  [dom.checkinName, dom.checkinPhone].forEach((input) => {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      dom.checkinName.setCustomValidity('');
+      checkinErrorKey = '';
+      updateCheckinControls();
+    });
+  });
 
   if (dom.copyCheckin) {
     dom.copyCheckin.addEventListener('click', () => copyCheckinLink(dom.copyCheckin));
@@ -1154,10 +1175,56 @@ function renderCheckinServices() {
 
 function toggleCheckinSubmit(enabled) {
   if (!dom.checkinForm) return;
-  const button = dom.checkinForm.querySelector('button[type="submit"]');
-  if (button) {
-    button.disabled = !enabled;
+  dom.checkinForm.dataset.unavailable = String(!enabled);
+  updateCheckinControls();
+}
+
+function checkinIdentity(name, phone) {
+  return {
+    nameKey: name.trim().replace(/\s+/gu, ' ').toLowerCase(),
+    phoneKey: phone.replace(/[٠-٩۰-۹]/g, (digit) => String(digit.charCodeAt(0) % 16)).replace(/\D/g, '')
+  };
+}
+
+function getCheckinCooldownRemaining() {
+  try {
+    checkinCooldown = JSON.parse(localStorage.getItem(LOCAL_KEYS.checkinCooldown)) || checkinCooldown;
+  } catch (error) {
+    // Keep the current page protected even if browser storage is unavailable.
   }
+  if (!checkinCooldown || checkinCooldown.branchId !== currentBranch?.id) return 0;
+  const identity = checkinIdentity(dom.checkinName.value, dom.checkinPhone.value);
+  const matches = (identity.nameKey && identity.nameKey === checkinCooldown.nameKey)
+    || (identity.phoneKey && identity.phoneKey === checkinCooldown.phoneKey);
+  return matches ? Math.max(0, new Date(checkinCooldown.retryAt).getTime() - Date.now()) : 0;
+}
+
+function updateCheckinControls() {
+  if (!dom.checkinForm) return;
+  const remaining = getCheckinCooldownRemaining();
+  const disabled = checkinSubmitting || remaining > 0 || dom.checkinForm.dataset.unavailable === 'true';
+  dom.checkinForm.querySelectorAll('button[type="submit"]').forEach((button) => {
+    button.disabled = disabled;
+  });
+  dom.checkinForm.setAttribute('aria-busy', String(checkinSubmitting));
+  dom.checkinName.readOnly = checkinSubmitting;
+  dom.checkinPhone.readOnly = checkinSubmitting;
+  if (dom.checkinFeedback) {
+    dom.checkinFeedback.textContent = checkinSubmitting ? t('checkin.submitting')
+      : remaining > 0 ? t('checkin.cooldown', { minutes: formatNumber(Math.ceil(remaining / 60000)) })
+        : checkinErrorKey ? t(checkinErrorKey) : '';
+  }
+}
+
+function rememberCheckin(entry, retryAt, identity) {
+  checkinCooldown = { ...identity, branchId: entry.branchId, retryAt };
+  try {
+    localStorage.setItem(LOCAL_KEYS.checkinCooldown, JSON.stringify(checkinCooldown));
+  } catch (error) {
+    // The server still enforces the waiting period when storage is unavailable.
+  }
+  persistTicket(entry);
+  showCheckinStatus(entry.id, entry.ticketNumber);
 }
 
 async function addServiceRow() {
@@ -1177,29 +1244,33 @@ async function removeService(serviceId) {
 
 async function handleCheckinSubmit(event) {
   event.preventDefault();
+  if (checkinSubmitting || getCheckinCooldownRemaining() > 0) return;
 
   const name = dom.checkinName.value.trim();
   const phone = dom.checkinPhone.value.trim();
+  dom.checkinName.setCustomValidity(name ? '' : t('checkin.nameRequired'));
+  if (!dom.checkinForm.reportValidity()) return;
 
-  const payload = {
-    name: name || null,
-    phone: phone || null
-  };
-
-  const entry = await createCheckin(payload);
-  await refreshData();
-
-  dom.checkinForm.reset();
-  persistTicket(entry);
-  showCheckinStatus(entry.id, entry.ticketNumber);
-}
-
-async function handleQuickCheckin() {
-  const payload = { name: null, phone: null };
-  const entry = await createCheckin(payload);
-  await refreshData();
-  persistTicket(entry);
-  showCheckinStatus(entry.id, entry.ticketNumber);
+  checkinSubmitting = true;
+  checkinErrorKey = '';
+  updateCheckinControls();
+  const identity = checkinIdentity(name, phone);
+  try {
+    const entry = await createCheckin({ name, phone: phone || null });
+    rememberCheckin(entry, entry.retryAt, identity);
+    await refreshData();
+  } catch (error) {
+    if (error.payload?.code === 'DUPLICATE_CHECKIN') {
+      rememberCheckin(error.payload.entry, error.payload.retryAt, identity);
+      await refreshData();
+    } else {
+      checkinErrorKey = error.payload?.code === 'NAME_REQUIRED' ? 'checkin.nameRequired' : 'checkin.failed';
+      console.warn('Check-in failed.', error);
+    }
+  } finally {
+    checkinSubmitting = false;
+    updateCheckinControls();
+  }
 }
 
 function showCheckinStatus(entryId, ticketNumber) {
@@ -1696,7 +1767,9 @@ async function apiFetch(path, options = {}) {
 
   if (!response.ok) {
     const payload = await safeJson(response);
-    throw new Error(payload.error || 'Request failed.');
+    const error = new Error(payload.error || 'Request failed.');
+    error.payload = payload;
+    throw error;
   }
 
   if (response.status === 204) return null;

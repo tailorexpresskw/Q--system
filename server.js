@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const STAFF_PIN = process.env.STAFF_PIN;
 const ADMIN_PIN = process.env.ADMIN_PIN || STAFF_PIN;
+const CHECKIN_COOLDOWN_MINUTES = 30;
 
 if (!DATABASE_URL) {
   console.error('DATABASE_URL is not set.');
@@ -178,7 +179,7 @@ async function initDatabase() {
     );
   `);
 
-  await pool.query('ALTER TABLE queue ALTER COLUMN name DROP NOT NULL;');
+  // Older tickets may have no name; enforce the requirement for new tickets below.
   await pool.query('ALTER TABLE queue ALTER COLUMN phone DROP NOT NULL;');
   await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS ticket_number integer;`);
   await pool.query(`ALTER TABLE queue ADD COLUMN IF NOT EXISTS branch_id uuid REFERENCES branches(id);`);
@@ -419,11 +420,16 @@ app.get('/api/queue', async (req, res, next) => {
 
 app.post('/api/checkin', async (req, res, next) => {
   try {
-    const name = String(req.body.name || '').trim();
+    const name = typeof req.body.name === 'string' ? req.body.name.trim().replace(/\s+/gu, ' ') : '';
     const phone = String(req.body.phone || '').trim();
+    const phoneKey = phone.replace(/[٠-٩۰-۹]/g, (digit) => String(digit.charCodeAt(0) % 16)).replace(/\D/g, '');
     let serviceId = String(req.body.serviceId || '').trim();
     const branchCode = String(req.body.branchCode || '').trim();
     const branchIdBody = String(req.body.branchId || '').trim();
+
+    if (!name) {
+      return res.status(400).json({ error: 'Customer name is required.', code: 'NAME_REQUIRED' });
+    }
 
     if (serviceId) {
       const serviceCheck = await pool.query('SELECT id FROM services WHERE id = $1', [serviceId]);
@@ -452,6 +458,37 @@ app.post('/api/checkin', async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Serialize check-ins for this branch before checking or incrementing its counter.
+      // The lock also protects against simultaneous requests on different server instances.
+      await client.query('SELECT id FROM branches WHERE id = $1 FOR UPDATE', [branch.id]);
+      const duplicate = await client.query(
+        `SELECT *, created_at + ($4 * INTERVAL '1 minute') AS retry_at
+         FROM queue
+         WHERE branch_id = $1
+           AND created_at > clock_timestamp() - ($4 * INTERVAL '1 minute')
+           AND (
+             lower(regexp_replace(btrim(name), '\\s+', ' ', 'g')) = lower($2)
+             OR ($3 <> '' AND regexp_replace(
+               translate(phone, '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'),
+               '[^0-9]', '', 'g'
+             ) = $3)
+           )
+         ORDER BY created_at DESC LIMIT 1`,
+        [branch.id, name, phoneKey, CHECKIN_COOLDOWN_MINUTES]
+      );
+      if (duplicate.rowCount) {
+        const existing = duplicate.rows[0];
+        const retryAfter = Math.max(1, Math.ceil((new Date(existing.retry_at).getTime() - Date.now()) / 1000));
+        await client.query('ROLLBACK');
+        res.set('Retry-After', String(retryAfter));
+        return res.status(409).json({
+          error: `You already have an appointment. Please wait ${CHECKIN_COOLDOWN_MINUTES} minutes before booking again.`,
+          code: 'DUPLICATE_CHECKIN',
+          retryAt: existing.retry_at,
+          entry: mapQueue(existing)
+        });
+      }
+
       const counterResult = await client.query(
         `UPDATE branches
          SET next_ticket = CASE
@@ -469,12 +506,16 @@ app.post('/api/checkin', async (req, res, next) => {
         `INSERT INTO queue (id, name, phone, service_id, branch_id, ticket_number, status)
          VALUES ($1, $2, $3, $4, $5, $6, 'waiting')
          RETURNING id, name, phone, service_id, branch_id, ticket_number, status, created_at, notified_at, served_at, canceled_at`,
-        [id, name || null, phone || null, serviceId, branch.id, ticketNumber]
+        [id, name, phone || null, serviceId, branch.id, ticketNumber]
       );
 
       await client.query('COMMIT');
       broadcast({ type: 'data.updated' });
-      res.status(201).json(mapQueue(result.rows[0]));
+      const entry = mapQueue(result.rows[0]);
+      res.status(201).json({
+        ...entry,
+        retryAt: new Date(new Date(entry.createdAt).getTime() + CHECKIN_COOLDOWN_MINUTES * 60000).toISOString()
+      });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
